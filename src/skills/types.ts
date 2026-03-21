@@ -41,6 +41,8 @@ export interface SkillContext {
   targetName?: string;
   /** 채널로 메세지 즉시 전송 (send_message 스킬 + plan executor 용) */
   sendMessage?: (text: string) => Promise<void>;
+  /** 채널로 이미지 전송 (스크린샷 등) */
+  sendPhoto?: (filePath: string, caption?: string) => Promise<void>;
   /** 서비스 ID (플랜 실행 시 식별용) */
   serviceId?: string;
 }

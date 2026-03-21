@@ -190,7 +190,10 @@ async function processMessage(
 
     // Resolve skills: builtin tools + custom skills (script + prompt)
     const customSkills = getEnabledCustomSkills(agent.id);
-    const ctxOverrides: Record<string, unknown> = { serviceId, targetName };
+    const sendPhotoToUser = channel?.sendPhoto
+      ? async (filePath: string, caption?: string) => { await channel.sendPhoto!(senderUserId, filePath, caption); }
+      : undefined;
+    const ctxOverrides: Record<string, unknown> = { serviceId, targetName, sendPhoto: sendPhotoToUser };
     if (agent.smart_step === 1) {
       ctxOverrides.sendMessage = sendToUser;
     }
@@ -620,9 +623,13 @@ export async function processCronMessage(
     const messages = buildLlmMessages(history, cronTimeAware);
 
     const customSkills = getEnabledCustomSkills(agent.id);
+    const cronSendPhoto = channel?.sendPhoto && platformUserId
+      ? async (filePath: string, caption?: string) => { await channel.sendPhoto!(platformUserId, filePath, caption); }
+      : undefined;
     const { tools, skillPrompts } = await resolveSkills(agent, customSkills, {
       serviceId,
       targetName: cronTargetName,
+      sendPhoto: cronSendPhoto,
     });
     const hasTools = Object.keys(tools).length > 0;
 

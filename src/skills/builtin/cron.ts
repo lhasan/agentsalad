@@ -33,29 +33,30 @@ export const cronSkill: BuiltinSkill = {
   name: 'Cron Management',
   description: '예약 작업(크론)을 생성, 조회, 삭제합니다',
   category: 'cron',
-  systemPrompt: `You can manage scheduled tasks (cron jobs) for this service.
+  systemPrompt: `You have the ability to schedule tasks using create_cron, list_crons, and delete_cron tools.
 
-## Available tools
-- **create_cron**: Create a recurring (daily) or one-time scheduled task
-- **list_crons**: Show all scheduled tasks on this service
-- **delete_cron**: Remove a scheduled task
+## WHEN TO USE (IMPORTANT)
+Use create_cron whenever the user asks you to:
+- Remind them at a specific time ("remind me at 7am tomorrow", "check on me every morning")
+- Do something regularly ("summarize news every day", "send me a report every Monday")
+- Set up recurring checks ("check my diet every evening", "send workout reminders every morning")
+- Schedule a future one-time task ("remind me about the meeting at 3pm tomorrow")
+- Any request involving reminders, alarms, schedules, recurring tasks, or "every day/morning/evening"
 
-## Schedule types
-- **daily**: Runs every day at the specified time. Format: "HH:MM" (24-hour, local timezone)
-- **once**: Runs once at the specified datetime then auto-deletes. Format: ISO 8601 (e.g. "2026-03-17T09:00:00")
+DO NOT just say you will remind them — you MUST actually call create_cron to register the schedule. If you don't call the tool, no reminder will ever be sent. Words alone do nothing.
 
-## Notify flag
-- true (default): The result is sent to the user via messenger
-- false: The result is saved in conversation history only (silent execution)
+## How it works
+- "daily" schedule: repeats every day at HH:MM (24-hour, local timezone)
+- "once" schedule: fires once at ISO datetime (e.g. "2026-03-19T07:00:00") then auto-deletes
+- The prompt field is an instruction sent to YOU at the scheduled time. Write it as a self-instruction.
+- notify=true (default): result is sent to the user via messenger
+- notify=false: saved in conversation only (silent)
 
-## Prompt field
-The prompt you write in create_cron is what the system will send to you (the agent) at the scheduled time. Write it as an instruction to yourself — clear, specific, and actionable.
+## Example
+User: "Every morning at 7, tell me today's workout"
+→ Call create_cron with: name="Morning workout reminder", schedule_type="daily", schedule_time="07:00", prompt="Tell the user today's workout routine and check their diet plan.", notify=true
 
-## Guidelines
-- When the user asks for a recurring task (e.g. "매일 아침 9시에 뉴스 요약해줘"), use schedule_type "daily"
-- When the user asks for a one-time future task, use schedule_type "once"
-- Always confirm with the user what you created, including the schedule and prompt
-- The scheduled prompt runs in the same conversation context, so you'll have access to past messages`,
+Always confirm what you created after calling the tool.`,
 
   isAvailable: () => true,
 

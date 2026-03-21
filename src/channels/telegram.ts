@@ -5,7 +5,7 @@
  * 메시지 수신: long polling
  * 메시지 발송: sendMessage API
  */
-import { Bot } from 'grammy';
+import { Bot, InputFile } from 'grammy';
 
 import { logger } from '../logger.js';
 import type { Channel, OnServiceMessage } from '../types.js';
@@ -106,6 +106,24 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
             chunk: Math.floor(i / MAX_LENGTH) + 1,
           },
           'Telegram chunk delivered',
+        );
+      }
+    },
+
+    async sendPhoto(targetUserId: string, filePath: string, caption?: string): Promise<void> {
+      const chatId = Number(targetUserId);
+      try {
+        const result = await bot.api.sendPhoto(chatId, new InputFile(filePath), {
+          caption: caption ? caption.slice(0, 1024) : undefined,
+        });
+        logger.debug(
+          { channelId, chatId, messageId: result.message_id },
+          'Telegram photo delivered',
+        );
+      } catch (err) {
+        logger.warn(
+          { channelId, chatId, filePath, err: err instanceof Error ? err.message : String(err) },
+          'Failed to send Telegram photo',
         );
       }
     },

@@ -39,7 +39,8 @@ Auto-compaction (Claude SDK pattern): when conversation context exceeds 75% of t
 | `src/skills/builtin/file-write.ts` | write_file tool (workspace scoped) |
 | `src/skills/builtin/file-list.ts` | list_files tool (workspace scoped) |
 | `src/skills/builtin/web-fetch.ts` | fetch_url tool (HTML→text) |
-| `src/skills/builtin/web-browse.ts` | Playwright browse_* tools (optional) |
+| `src/skills/builtin/web-browse.ts` | Playwright browse_* 8 tools (navigate, content, click, type, screenshot, scroll, wait, links) |
+| `src/skills/builtin/browser-manager.ts` | BrowserManager singleton (lazy Chromium, per-service context, idle cleanup) |
 | `src/skills/builtin/bash.ts` | run_command tool (workspace cwd) |
 | `src/skills/builtin/google/index.ts` | gog CLI availability check + runner |
 | `src/skills/builtin/google/gmail.ts` | gmail_search, gmail_send, gmail_read |
@@ -50,6 +51,14 @@ Auto-compaction (Claude SDK pattern): when conversation context exceeds 75% of t
 | `src/skills/builtin/submit-plan.ts` | submit_plan tool (Smart Step plan submission) |
 | `src/logger.ts` | Pino logger setup |
 | `src/timezone.ts` | Timezone utilities |
+| `electron/main.ts` | Electron main process: BrowserWindow, Tray, IPC, 서버 자동 감지 |
+| `electron/server-manager.ts` | 서버 프로세스 spawn/kill/health-check (EventEmitter) |
+| `electron/preload.ts` | contextBridge IPC 브릿지 (renderer ↔ main) |
+| `electron/renderer/index.html` | Electron 상태 페이지 (stopped/starting/error UI) |
+| `electron/update-checker.ts` | GitHub Release 기반 업데이트 알림 (4시간 간격 체크) |
+| `electron/launch.cjs` | Electron 런처 (ELECTRON_RUN_AS_NODE 해제) |
+| `electron/tsconfig.json` | Electron 전용 TS 설정 (CJS, dist-electron/) |
+| `scripts/download-node.cjs` | Electron 패키징용 Node.js 바이너리 다운로더 |
 
 ## Architecture
 
@@ -92,9 +101,23 @@ User ──▶ Messenger ──▶ Channel (Telegram)
 npm run dev          # Run with hot reload
 npm run build        # Compile TypeScript
 npm test             # Run vitest
+npm run electron     # Electron 데스크톱 앱 실행
+npm run electron:build  # 배포용 빌드 (.dmg / .exe / .AppImage)
 ```
 
 Web UI: `http://127.0.0.1:3210`
+
+## Electron Desktop Wrapper
+
+`src/` 코드 무변경. `electron/` 폴더 완전 분리.
+
+- **서버 자동 감지**: 앱 시작 시 :3210 포트 체크 → 이미 서버 떠있으면 바로 웹 UI 로드
+- **서버 관리**: Start/Stop 버튼으로 `node dist/index.js` spawn/kill
+- **시스템 트레이**: X 버튼 → 창 숨김 (서버 유지), Quit → 완전 종료
+- **상태 감지**: 5초 간격 health check, 서버 죽으면 자동으로 상태 페이지 복귀
+- **Node.js 번들링**: 패키징 시 `scripts/download-node.cjs`로 Node.js 바이너리 다운로드 → `build/node/`에 저장 → extraResources로 포함. 시스템 Node 미설치 환경에서도 동작.
+- **빌드**: `electron/tsconfig.json` → CJS로 `dist-electron/`에 출력, `dist-electron/package.json`으로 CJS 강제
+- **주의**: Cursor 등 Electron IDE 터미널에서 `ELECTRON_RUN_AS_NODE=1` 상속 → `launch.cjs`에서 해제
 
 ## Compaction System
 

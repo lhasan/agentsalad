@@ -51,6 +51,13 @@ npm run dev
 
 Open **http://127.0.0.1:3210** — if you see the dashboard, you're good.
 
+> **Already installed?** Next time, just open Terminal and run:
+> ```bash
+> cd ~/Desktop/agentsalad
+> npm run dev
+> ```
+> You must be inside the `agentsalad` folder every time you start.
+
 <details>
 <summary><strong>macOS</strong> — detailed setup</summary>
 

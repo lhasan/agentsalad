@@ -1,7 +1,12 @@
 /**
  * Agent Salad - Configuration
  *
- * 서비스 플랫폼 전역 설정. STORE_DIR(데이터 저장소), TIMEZONE, Web UI 설정만 관리.
+ * 서비스 플랫폼 전역 설정. STORE_DIR, TIMEZONE, Web UI, Browser 설정 관리.
+ *
+ * Browser 환경변수:
+ *  BROWSER_HEADLESS=true   → headless 모드 (기본: false, headed 모드로 창이 열림)
+ *  BROWSER_CDP_URL=http://localhost:9222  → 기존 Chrome에 CDP로 연결
+ *    Chrome 실행: /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
  */
 import path from 'path';
 

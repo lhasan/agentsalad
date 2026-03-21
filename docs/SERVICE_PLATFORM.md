@@ -162,7 +162,7 @@ Builtin skills (code-level tools, per-agent toggle):
 | `file_write` | File | `write_file(path, content)` | — |
 | `file_list` | File | `list_files(directory?)` | — |
 | `web_fetch` | Web | `fetch_url(url)` | — |
-| `web_browse` | Web | `browse_navigate`, `browse_content`, `browse_click`, `browse_type` | `playwright` |
+| `web_browse` | Web | `browse_navigate`, `browse_content`, `browse_click`, `browse_type`, `browse_screenshot`, `browse_scroll`, `browse_wait`, `browse_links` | `playwright` (bundled) |
 | `bash` | System | `run_command(command)` | — |
 | `google_gmail` | Google | `gmail_search`, `gmail_send`, `gmail_read` | `gog CLI` |
 | `google_calendar` | Google | `calendar_list`, `calendar_create` | `gog CLI` |
@@ -358,6 +358,7 @@ SQLite via `better-sqlite3`. See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for fu
 | `grammy` | Telegram Bot API framework |
 | `better-sqlite3` | SQLite database |
 | `cron-parser` | Cron expression parsing |
+| `playwright` | Headless Chromium browser automation (web_browse skill) |
 | `pino` | Structured logging |
 | `zod` | Tool input schema validation |
 
@@ -400,7 +401,8 @@ agentsalad/
 │           ├── file-write.ts      # write_file tool
 │           ├── file-list.ts       # list_files tool
 │           ├── web-fetch.ts       # fetch_url tool
-│           ├── web-browse.ts      # Playwright browse tools
+│           ├── web-browse.ts      # Playwright browse tools (8 tools)
+│           ├── browser-manager.ts # BrowserManager singleton (lifecycle, session isolation)
 │           ├── bash.ts            # run_command tool
 │           ├── cron.ts            # create/list/delete cron tools
 │           ├── send-message.ts    # send_message tool

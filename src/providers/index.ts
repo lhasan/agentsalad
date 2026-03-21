@@ -207,6 +207,7 @@ export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
         model: params.model,
         errorType: classified.type,
         statusCode: classified.statusCode,
+        rawError: err instanceof Error ? err.message : String(err),
       },
       `Provider error: ${classified.type}`,
     );

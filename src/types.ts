@@ -186,12 +186,11 @@ export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string): Promise<void>;
+  sendPhoto?(jid: string, filePath: string, caption?: string): Promise<void>;
   isConnected(): boolean;
   disconnect(): Promise<void>;
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
-  // Legacy compat: returns true if this channel handles the given JID
   ownsJid?(jid: string): boolean;
-  // Legacy compat: sync group/chat names from the platform
   syncGroups?(force: boolean): Promise<void>;
 }
 

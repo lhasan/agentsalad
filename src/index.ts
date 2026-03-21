@@ -77,6 +77,7 @@ import {
 import { logger } from './logger.js';
 import type { AgentProfile } from './types.js';
 import { cleanupStalePlans } from './plan-executor.js';
+import { browserManager } from './skills/builtin/browser-manager.js';
 import { readdirSync, statSync, existsSync, renameSync, mkdirSync } from 'fs';
 import { join, relative } from 'path';
 
@@ -610,6 +611,7 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'Shutdown signal received');
     stopCronScheduler();
     webUiServer?.close();
+    await browserManager.shutdown();
     await shutdownServiceChannels();
     process.exit(0);
   };

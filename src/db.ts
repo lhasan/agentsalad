@@ -1310,6 +1310,8 @@ export function getCronJobById(id: string): CronJob | undefined {
     .get(id) as CronJob | undefined;
 }
 
+const CRON_THUMBS = ['🌶️', '🧂', '🫚', '🍯', '🫘', '🥫', '🥣', '🍶', '🧈', '🥄'];
+
 export function createCronJob(input: {
   id: string;
   name: string;
@@ -1321,6 +1323,8 @@ export function createCronJob(input: {
   thumbnail?: string;
 }): void {
   const now = new Date().toISOString();
+  const thumb =
+    input.thumbnail || CRON_THUMBS[Math.floor(Math.random() * CRON_THUMBS.length)];
   db.prepare(
     `INSERT INTO cron_jobs (id, name, prompt, skill_hint, schedule_type, schedule_time, notify, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
@@ -1331,7 +1335,7 @@ export function createCronJob(input: {
     input.scheduleType,
     input.scheduleTime,
     input.notify === false ? 0 : 1,
-    input.thumbnail ?? null,
+    thumb,
     now,
     now,
   );
