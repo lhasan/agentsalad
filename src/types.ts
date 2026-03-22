@@ -158,6 +158,8 @@ export interface TargetProfile {
   platform: ChannelType;
   /** 'user' = DM 대상, 'room' = 채널/스레드 대상, 'everyone' = 기본 자동 생성 템플릿 */
   target_type: TargetType;
+  /** 생성 출처: 수동 생성 vs everyone 템플릿 자동 생성 */
+  creation_source: 'manual' | 'everyone_template';
   /** 워크스페이스 폴더명 (자동 생성 타겟은 불변 ID 기반) */
   folder_name: string;
   thumbnail: string | null;
@@ -239,6 +241,8 @@ export interface Channel {
   isConnected(): boolean;
   disconnect(): Promise<void>;
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
+  /** 채널/스레드에 typing indicator 전송 (Discord 서버 채널 등) */
+  setTypingInRoom?(roomId: string, isTyping: boolean): Promise<void>;
   ownsJid?(jid: string): boolean;
   syncGroups?(force: boolean): Promise<void>;
 }

@@ -104,8 +104,8 @@ function classifyApiError(err: unknown): ProviderError {
     ];
     const waitMin = retryAfter ? Math.ceil(Number(retryAfter) / 60) : undefined;
     userMsg = waitMin
-      ? `⚠️ API 호출 한도 초과 — 약 ${waitMin}분 후 재시도 가능합니다.`
-      : '⚠️ API 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요.';
+      ? `⚠️ API rate limit exceeded — retry available in ~${waitMin} min.`
+      : '⚠️ API rate limit exceeded. Please try again shortly.';
   } else if (
     status === 401 ||
     status === 403 ||
@@ -113,30 +113,30 @@ function classifyApiError(err: unknown): ProviderError {
     bodyLower.includes('invalid api key')
   ) {
     type = 'auth';
-    userMsg = '⚠️ API 인증 실패 — API 키를 확인해주세요.';
+    userMsg = '⚠️ API authentication failed — please check your API key.';
   } else if (
     status === 404 ||
     bodyLower.includes('not found') ||
     bodyLower.includes('not supported')
   ) {
     type = 'model_not_found';
-    userMsg = '⚠️ 모델을 찾을 수 없습니다. 모델명을 확인해주세요.';
+    userMsg = '⚠️ Model not found — please check the model name.';
   } else if (
     status === 503 ||
     status === 529 ||
     bodyLower.includes('overloaded')
   ) {
     type = 'overloaded';
-    userMsg = '⚠️ AI 서버가 과부하 상태입니다. 잠시 후 다시 시도해주세요.';
+    userMsg = '⚠️ AI server is overloaded. Please try again shortly.';
   } else if (
     bodyLower.includes('context length') ||
     bodyLower.includes('token') ||
     bodyLower.includes('too long')
   ) {
     type = 'context_length';
-    userMsg = '⚠️ 대화가 너무 길어 처리할 수 없습니다. 새 대화를 시작해주세요.';
+    userMsg = '⚠️ Conversation too long to process. Please start a new conversation.';
   } else {
-    userMsg = '⚠️ AI 응답 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+    userMsg = '⚠️ An error occurred while generating a response. Please try again shortly.';
   }
 
   return new ProviderError(type, status, userMsg, err);

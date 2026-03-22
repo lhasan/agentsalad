@@ -4,6 +4,7 @@
  * 서버 프로세스를 child_process로 관리하고,
  * BrowserWindow에 상태 페이지 또는 웹 UI를 표시.
  * 시스템 트레이로 백그라운드 동작 지원.
+ * 앱 아이콘: build/icon.{icns,ico,png} — BrowserWindow + electron-builder 모두 적용.
  *
  * 동작:
  *  - X 버튼 → 창 숨김 (트레이에 유지, 서버 계속 동작)
@@ -70,6 +71,7 @@ function initTrayIcons(): void {
 
 async function createWindow(): Promise<void> {
   const preloadPath = path.join(__dirname, 'preload.js');
+  const iconPath = path.join(__dirname, '..', 'build', 'icon.png');
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -77,6 +79,7 @@ async function createWindow(): Promise<void> {
     minWidth: 800,
     minHeight: 600,
     title: 'Agent Salad',
+    icon: iconPath,
     show: false,
     webPreferences: {
       preload: preloadPath,

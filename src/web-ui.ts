@@ -1,21 +1,24 @@
 /**
  * Agent Salad — Admin Dashboard
  *
- * 단일 페이지 UI (라이트 테마 + 샐러드 메타포 + 4개국어 i18n)
+ * 단일 페이지 UI (라이트 테마 + 샐러드 메타포 + 4개국어 i18n: EN/KO/JA/ZH)
  * My Salads 탭: 서비스 카드 + 크론 영역 + 3열 블록 그리드 (에이전트/채널/대상)
  * Agents 탭: 에이전트 상세 설정 (스킬, 프롬프트)
  * Skills 탭: 기본/커스텀 스킬 카탈로그
  *
  * 멀티채널: Telegram/Discord/Slack 페어링 API 지원 (채널 타입별 분기).
- * WebUiContext에 pairDiscordBot, pairSlackBot 추가.
- * 최근 수정: Slack 연동 안내를 비개발자 기준 4단계로 압축했고,
- * everyone UI는 공용 블록 1개로 합쳐 상단에 노출한다.
- * 퍼블릭으로 자동 생성된 항목은 왼쪽 대상/예약 리스트에서 숨김 토글로 제어한다.
+ * everyone UI는 공용 블록 1개로 합쳐 상단에 노출, 퍼블릭 숨김 토글로 제어.
+ *
+ * 최근 수정 요약:
+ * - API Key Settings 모달을 카드형 레이아웃으로 리디자인 (프로바이더별 카드 + 상태 뱃지 + 키 발급 링크)
+ * - 4개 언어 Slack 셋업 가이드를 manifest 기반 플로우로 통일 (en/ja/zh가 ko와 동일)
+ * - 하드코딩 영어 문자열 ('Active Services', 'service') i18n 키로 교체
+ * - 초기 HTML 한국어 깜박임 제거 (applyLang()이 채우도록 빈 문자열로 초기화)
  */
 import http from 'http';
 import { URL } from 'url';
 
-import { logger } from './logger.js';
+import { logger, getRecentErrors, clearErrorBuffer } from './logger.js';
 import { getSlackAppManifestJson } from './slack-manifest.js';
 import type {
   AgentProfile,
@@ -68,7 +71,7 @@ export interface WebUiContext {
   pairDiscordBot: (
     channelId: string,
     botToken: string,
-  ) => Promise<{ success: boolean; error?: string; botUsername?: string }>;
+  ) => Promise<{ success: boolean; error?: string; botUsername?: string; botId?: string }>;
   pairSlackBot: (
     channelId: string,
     botToken: string,
@@ -397,7 +400,7 @@ body{margin:0;position:relative}
 /* Modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100}
 .modal-bg.show{display:flex}
-.modal{background:var(--s2);border:1px solid var(--border);border-radius:var(--rl);padding:24px;width:90%;max-width:480px;max-height:80vh;overflow-y:auto}
+.modal{background:var(--s2);border:1px solid var(--border);border-radius:var(--rl);padding:24px;width:90%;max-width:520px;max-height:80vh;overflow-y:auto}
 .modal h3{font-size:1.1rem;font-weight:700;margin-bottom:16px}
 .uc-card{display:flex;gap:14px;padding:16px 18px;background:var(--bg);border:1px solid var(--border);border-radius:10px}
 .uc-icon{font-size:1.6rem;flex-shrink:0;width:36px;text-align:center;line-height:1.6}
@@ -407,12 +410,18 @@ body{margin:0;position:relative}
 .uc-how b{color:var(--t1)}
 .uc-step{margin-bottom:8px}
 .uc-step:last-child{margin-bottom:0}
-.modal .prov-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
-.modal .prov-row:last-child{border:none}
-.modal .prov-name{font-weight:600;font-size:.82rem;min-width:90px}
-.modal .prov-key{font-size:.68rem;color:var(--t3)}
-.modal .prov-input{flex:1;display:flex;gap:5px}
-.modal .prov-input input{font-family:var(--mono);font-size:.72rem;flex:1}
+.modal .prov-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.modal .prov-card:last-child{margin-bottom:0}
+.modal .prov-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.modal .prov-name{font-weight:700;font-size:.92rem;color:var(--t1)}
+.modal .prov-name a{color:var(--indigo);font-size:.75rem;font-weight:500;text-decoration:none;margin-left:8px}
+.modal .prov-name a:hover{text-decoration:underline;color:var(--indigo-h)}
+.modal .prov-badge{font-size:.7rem;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.modal .prov-badge.set{background:var(--green-s);color:var(--green)}
+.modal .prov-badge.unset{background:var(--s3);color:var(--t3)}
+.modal .prov-input{display:flex;gap:6px;align-items:center}
+.modal .prov-input input{font-family:var(--mono);font-size:.78rem;flex:1;min-width:0}
+.modal .prov-input .btn{flex-shrink:0}
 
 /* Detail Panel (slide-in from right) */
 .detail-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);display:none;z-index:200;justify-content:flex-end}
@@ -469,6 +478,20 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 .tab-btn.active{color:var(--t1);border-bottom-color:var(--green)}
 .tab-panel{display:none}
 .tab-panel.active{display:block;animation:fadeIn .2s;padding-top:8px}
+
+/* Log entries */
+.log-entry{display:grid;grid-template-columns:140px 54px 1fr;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:start;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.78rem;line-height:1.5}
+.log-entry:hover{background:var(--s1)}
+.log-ts{color:var(--t3);white-space:nowrap}
+.log-level{font-weight:700;border-radius:3px;padding:1px 6px;text-align:center;font-size:.72rem;text-transform:uppercase}
+.log-level.warn{background:#fff3cd;color:#856404}
+.log-level.error{background:#f8d7da;color:#721c24}
+.log-level.fatal{background:#721c24;color:#fff}
+.log-msg{color:var(--t1);word-break:break-word}
+.log-details{color:var(--t3);font-size:.72rem;margin-top:2px;cursor:pointer}
+.log-details:hover{color:var(--t1)}
+.log-empty{text-align:center;padding:40px;color:var(--t3);font-size:.9rem}
+.log-hdr{display:grid;grid-template-columns:140px 54px 1fr;gap:8px;padding:6px 10px;font-size:.72rem;font-weight:600;color:var(--t3);text-transform:uppercase;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--bg)}
 
 /* Split layout (shared: Agents tab, Skills tab) */
 .split-layout{display:flex;gap:20px;min-height:480px}
@@ -592,6 +615,7 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
   <button class="tab-btn active" data-tab="services" onclick="switchTab('services')" id="tabServices">My Salads</button>
   <button class="tab-btn" data-tab="agents" onclick="switchTab('agents')" id="tabAgents">Agents</button>
   <button class="tab-btn" data-tab="skills" onclick="switchTab('skills')" id="tabSkills">Skills</button>
+  <button class="tab-btn" data-tab="logs" onclick="switchTab('logs')" id="tabLogs">Logs</button>
   <div class="tab-nav-r">
     <select class="lang-sel" id="langSelect" onchange="setLang(this.value)">
       <option value="en">EN</option>
@@ -616,8 +640,8 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 
 <!-- COMPOSER: drag slots -->
 <div class="composer">
-  <div class="sec-label" id="secCreate">샐러드 만들기</div>
-  <div class="sec-desc" id="secCreateDesc" style="color:var(--t3);font-size:0.9em;margin:-4px 0 10px 0">아래 블록을 슬롯으로 드래그하세요</div>
+  <div class="sec-label" id="secCreate"></div>
+  <div class="sec-desc" id="secCreateDesc" style="color:var(--t3);font-size:0.9em;margin:-4px 0 10px 0"></div>
   <div class="slots">
     <div class="slot a-slot empty" id="slotA" data-type="agent" onclick="hintSlotSource('agent')">
       <div class="slot-label" id="slotALabel">Agent</div>
@@ -654,7 +678,7 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
       <div id="agentsListItems"></div>
     </div>
     <div class="split-detail" id="agentsDetail">
-      <div class="agent-detail-empty" id="agentDetailEmpty">목록에서 에이전트를 선택하세요</div>
+      <div class="agent-detail-empty" id="agentDetailEmpty"></div>
     </div>
   </div>
 </div><!-- /tab-agents -->
@@ -664,8 +688,8 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
   <div class="split-layout">
     <div class="split-list" id="skillsList">
       <div class="sk-list-header">
-        <span class="sec-label" style="margin:0" id="secSkillsAll">스킬</span>
-        <button class="btn btn-p btn-sm" onclick="newCustomSkillInline()" id="btnNewSkillTab">+ 스킬 만들기</button>
+        <span class="sec-label" style="margin:0" id="secSkillsAll"></span>
+        <button class="btn btn-p btn-sm" onclick="newCustomSkillInline()" id="btnNewSkillTab"></button>
       </div>
       <div id="skillsListItems"></div>
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
@@ -674,10 +698,23 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
       </div>
     </div>
     <div class="split-detail" id="skillsDetail">
-      <div class="skill-detail-empty" id="skillDetailEmpty">목록에서 스킬을 선택하세요</div>
+      <div class="skill-detail-empty" id="skillDetailEmpty"></div>
     </div>
   </div>
 </div><!-- /tab-skills -->
+
+<!-- TAB: LOGS -->
+<div class="tab-panel" id="tab-logs">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <span class="sec-label" style="margin:0" id="secLogs">Error Logs</span>
+    <button class="btn btn-g btn-sm" onclick="loadErrorLogs()" id="btnRefreshLogs">Refresh</button>
+    <button class="btn btn-g btn-sm" style="color:var(--red)" onclick="clearErrorLogs()" id="btnClearLogs">Clear</button>
+    <label style="margin-left:auto;font-size:.78rem;color:var(--t3);display:flex;align-items:center;gap:4px">
+      <input type="checkbox" id="logAutoRefresh" onchange="toggleLogAutoRefresh(this.checked)"> <span id="lblAutoRefresh">Auto-refresh</span>
+    </label>
+  </div>
+  <div id="logList" style="font-size:.82rem"></div>
+</div><!-- /tab-logs -->
 </main>
 </div><!-- /app-layout -->
 
@@ -858,25 +895,21 @@ en:{
   channelTypeHint:'Select the messenger platform for this channel.',
   botTokenHint:'Create a bot with <a href="https://t.me/BotFather" target="_blank">@BotFather</a> on Telegram and paste the token here.',
   botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li>Go to <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → name it → Create</li>'
+    +'<li>Go to <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → name your bot (this is what users see) → Create</li>'
     +'<li>Left menu → <b>Bot</b> → click <b>Reset Token</b> → <b>Copy</b> the token</li>'
     +'<li>Scroll down to <b>Privileged Gateway Intents</b> → turn on <b>MESSAGE CONTENT INTENT</b> and <b>SERVER MEMBERS INTENT</b> → Save</li>'
-    +'<li>Left menu → <b>OAuth2</b> → <b>URL Generator</b></li>'
-    +'<li>Scopes: check <b>bot</b> · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
-    +'<li>Copy the generated URL → open in browser → select your server → Authorize</li>'
     +'</ol>',
+  discordInvite:'Discord Bot Invite',discordInviteHint:'Click the button below to add your bot to a Discord server. The invite link includes all required permissions.',discordInviteOpen:'Open Invite Link',copy:'Copy',copied:'Copied!',
   botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li>Go to <a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → name it, select workspace → Create</li>'
-    +'<li>Left menu → <b>OAuth &amp; Permissions</b> → scroll to <b>Bot Token Scopes</b> → add: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
-    +'<li>Scroll up → <b>Install to Workspace</b> → Allow</li>'
-    +'<li>Copy the <b>Bot User OAuth Token</b> (starts with <code>xoxb-</code>)</li>'
-    +'<li>Left menu → <b>Event Subscriptions</b> → Enable Events → Add bot events: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'<li>Go to <a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From an app manifest</b> → paste the manifest JSON below.</li>'
+    +'<li><b>Install App</b> → click <b>Install to Workspace</b>.</li>'
+    +'<li>Copy the <b>Bot User OAuth Token</b> (starts with <code>xoxb-</code>) and paste it here.</li>'
+    +'<li><b>App Home</b> → make sure <b>Messages Tab</b> is always on.</li>'
     +'</ol>',
   appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li>Left menu → <b>Socket Mode</b> → turn on <b>Enable Socket Mode</b></li>'
-    +'<li>A dialog appears → name the token (e.g. "socket") → add scope <code>connections:write</code> → <b>Generate</b></li>'
-    +'<li>Copy the token (starts with <code>xapp-</code>)</li>'
-    +'<li><i>Or: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'<li><b>Basic Information</b> → <b>App-Level Tokens</b> → <b>Generate Token and Scopes</b></li>'
+    +'<li>Enter any name, add scope <code>connections:write</code>.</li>'
+    +'<li>Copy the generated <b>App-Level Token</b> (starts with <code>xapp-</code>) and paste it here.</li>'
     +'</ol>',
   appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'1. After entering the channel name, open this <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>. The app name and bot name default to <b>{defaultName}</b>.<br>2. In Slack, choose <b>Create New App</b> → <b>From an app manifest</b> and paste it. If you want a different bot identity, change the name fields there before creating the app.',
   platformSelectHint:'Select the messaging platform.',
@@ -926,6 +959,10 @@ en:{
   toolsLabel:'Tools',confirmDetachCron:'Detach "{name}" from this service?',shutdownFailed:'Shutdown failed: ',
   confirmOk:'OK',serviceSingular:'service',servicePlural:'services',
   ok:'OK',
+  logs:'Logs',errorLogs:'Error Logs',noLogs:'No errors logged. All clear!',
+  logTime:'Time',logLevel:'Level',logMessage:'Message',
+  refreshLogs:'Refresh',clearLogs:'Clear',autoRefresh:'Auto-refresh',
+  confirmClearLogs:'Clear all error logs?',
 },
 ko:{
   services:'내 샐러드',skills:'스킬',activeServices:'내 샐러드',
@@ -1044,13 +1081,11 @@ ko:{
   channelTypeHint:'이 채널에 사용할 메신저 플랫폼을 선택하세요.',
   botTokenHint:'Telegram에서 <a href="https://t.me/BotFather" target="_blank">@BotFather</a>로 봇을 만들고, 받은 토큰을 붙여넣으세요.',
   botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 이름 입력 → Create</li>'
+    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 봇 이름 입력 (유저에게 보이는 이름) → Create</li>'
     +'<li>왼쪽 메뉴 → <b>Bot</b> → <b>Reset Token</b> 클릭 → 토큰 <b>복사</b></li>'
     +'<li>아래로 스크롤 → <b>Privileged Gateway Intents</b> → <b>MESSAGE CONTENT INTENT</b>와 <b>SERVER MEMBERS INTENT</b> 켜기 → Save</li>'
-    +'<li>왼쪽 메뉴 → <b>OAuth2</b> → <b>URL Generator</b></li>'
-    +'<li>Scopes: <b>bot</b> 체크 · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
-    +'<li>생성된 URL 복사 → 브라우저에서 열기 → 서버 선택 → Authorize (봇 초대 완료)</li>'
     +'</ol>',
+  discordInvite:'Discord 봇 초대',discordInviteHint:'아래 버튼을 클릭하여 Discord 서버에 봇을 추가하세요. 필요한 권한이 모두 포함되어 있습니다.',discordInviteOpen:'초대 링크 열기',copy:'복사',copied:'복사됨!',
   botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
     +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From an app manifest</b> → 아래 매니페스트 JSON을 그대로 붙여넣으세요.</li>'
     +'<li><b>Install App</b> → <b>Install to Workspace</b>를 누르세요.</li>'
@@ -1107,6 +1142,10 @@ ko:{
   toolsLabel:'도구',confirmDetachCron:'"{name}" 예약을 이 샐러드에서 분리하시겠습니까?',shutdownFailed:'종료 실패: ',
   confirmOk:'확인',serviceSingular:'서비스',servicePlural:'서비스',
   ok:'확인',
+  logs:'로그',errorLogs:'에러 로그',noLogs:'에러 없음. 정상 운영 중!',
+  logTime:'시간',logLevel:'레벨',logMessage:'메시지',
+  refreshLogs:'새로고침',clearLogs:'삭제',autoRefresh:'자동 새로고침',
+  confirmClearLogs:'에러 로그를 모두 삭제하시겠습니까?',
 },
 ja:{
   services:'マイサラダ',skills:'スキル',activeServices:'マイサラダ',
@@ -1223,25 +1262,21 @@ ja:{
   channelTypeHint:'このチャンネルで使うメッセンジャーを選択してください。',
   botTokenHint:'Telegramで<a href="https://t.me/BotFather" target="_blank">@BotFather</a>からボットを作成し、トークンを貼り付けてください。',
   botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 名前入力 → Create</li>'
+    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → ボット名を入力（ユーザーに表示される名前） → Create</li>'
     +'<li>左メニュー → <b>Bot</b> → <b>Reset Token</b> → トークンを<b>コピー</b></li>'
     +'<li>下にスクロール → <b>Privileged Gateway Intents</b> → <b>MESSAGE CONTENT INTENT</b>と<b>SERVER MEMBERS INTENT</b>をオン → Save</li>'
-    +'<li>左メニュー → <b>OAuth2</b> → <b>URL Generator</b></li>'
-    +'<li>Scopes: <b>bot</b> · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
-    +'<li>生成URLをコピー → ブラウザで開く → サーバー選択 → Authorize（ボット招待完了）</li>'
     +'</ol>',
+  discordInvite:'Discordボット招待',discordInviteHint:'下のボタンをクリックしてDiscordサーバーにボットを追加してください。必要な権限がすべて含まれています。',discordInviteOpen:'招待リンクを開く',copy:'コピー',copied:'コピーしました！',
   botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → 名前・ワークスペース選択 → Create</li>'
-    +'<li>左メニュー → <b>OAuth &amp; Permissions</b> → <b>Bot Token Scopes</b>に追加: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
-    +'<li>上にスクロール → <b>Install to Workspace</b> → Allow</li>'
-    +'<li><b>Bot User OAuth Token</b>をコピー（<code>xoxb-</code>で始まる）</li>'
-    +'<li>左メニュー → <b>Event Subscriptions</b> → Enable Events → ボットイベント追加: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From an app manifest</b> → 下のマニフェストJSONをそのまま貼り付けてください。</li>'
+    +'<li><b>Install App</b> → <b>Install to Workspace</b>をクリック。</li>'
+    +'<li>表示される<b>Bot User OAuth Token</b>（<code>xoxb-</code>）をここに貼り付けてください。</li>'
+    +'<li><b>App Home</b> → <b>Messages Tab</b>を常にオンにしてください。</li>'
     +'</ol>',
   appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li>左メニュー → <b>Socket Mode</b> → <b>Enable Socket Mode</b>をオン</li>'
-    +'<li>ダイアログでトークン名入力（例: "socket"）→ スコープ<code>connections:write</code>追加 → <b>Generate</b></li>'
-    +'<li>トークンをコピー（<code>xapp-</code>で始まる）</li>'
-    +'<li><i>または: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'<li><b>Basic Information</b> → <b>App-Level Tokens</b> → <b>Generate Token and Scopes</b></li>'
+    +'<li>名前は何でもOK、スコープは<code>connections:write</code>を1つ追加。</li>'
+    +'<li>生成された<b>App-Level Token</b>（<code>xapp-</code>）をここに貼り付けてください。</li>'
     +'</ol>',
   appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'まずチャンネル名を入力してから、この <a href="{manifestUrl}" target="_blank" download>manifest JSON</a> を開いてください。アプリ名とボット名は既定で <b>{defaultName}</b> になります。Slack の <b>Create New App</b> → <b>From an app manifest</b> で貼り付け、別名にしたい場合は name を変更してください。',
   platformSelectHint:'メッセージを送るプラットフォームを選んでください。',
@@ -1288,6 +1323,10 @@ ja:{
   toolsLabel:'ツール',confirmDetachCron:'「{name}」をこのサラダから外しますか？',shutdownFailed:'停止失敗: ',
   confirmOk:'確認',serviceSingular:'サラダ',servicePlural:'サラダ',
   ok:'OK',
+  logs:'ログ',errorLogs:'エラーログ',noLogs:'エラーなし。正常稼働中！',
+  logTime:'時刻',logLevel:'レベル',logMessage:'メッセージ',
+  refreshLogs:'更新',clearLogs:'クリア',autoRefresh:'自動更新',
+  confirmClearLogs:'エラーログをすべて削除しますか？',
 },
 zh:{
   services:'我的沙拉',skills:'技能',activeServices:'我的沙拉',
@@ -1403,25 +1442,21 @@ zh:{
   channelTypeHint:'选择此频道使用的消息平台。',
   botTokenHint:'在Telegram中通过<a href="https://t.me/BotFather" target="_blank">@BotFather</a>创建机器人并粘贴令牌。',
   botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 输入名称 → Create</li>'
+    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 输入机器人名称（用户看到的名字） → Create</li>'
     +'<li>左菜单 → <b>Bot</b> → <b>Reset Token</b> → <b>复制</b>令牌</li>'
     +'<li>向下滚动 → <b>Privileged Gateway Intents</b> → 开启 <b>MESSAGE CONTENT INTENT</b> 和 <b>SERVER MEMBERS INTENT</b> → Save</li>'
-    +'<li>左菜单 → <b>OAuth2</b> → <b>URL Generator</b></li>'
-    +'<li>Scopes: 勾选 <b>bot</b> · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
-    +'<li>复制生成的URL → 在浏览器打开 → 选择服务器 → Authorize（机器人邀请完成）</li>'
     +'</ol>',
+  discordInvite:'Discord机器人邀请',discordInviteHint:'点击下方按钮将机器人添加到Discord服务器。邀请链接已包含所有必需权限。',discordInviteOpen:'打开邀请链接',copy:'复制',copied:'已复制！',
   botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → 输入名称、选择工作区 → Create</li>'
-    +'<li>左菜单 → <b>OAuth &amp; Permissions</b> → <b>Bot Token Scopes</b> 添加: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
-    +'<li>向上滚动 → <b>Install to Workspace</b> → Allow</li>'
-    +'<li>复制 <b>Bot User OAuth Token</b>（以 <code>xoxb-</code> 开头）</li>'
-    +'<li>左菜单 → <b>Event Subscriptions</b> → Enable Events → 添加机器人事件: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'<li>前往 <a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From an app manifest</b> → 粘贴下方的清单JSON。</li>'
+    +'<li><b>Install App</b> → 点击 <b>Install to Workspace</b>。</li>'
+    +'<li>复制显示的 <b>Bot User OAuth Token</b>（<code>xoxb-</code>开头）粘贴到这里。</li>'
+    +'<li><b>App Home</b> → 确保 <b>Messages Tab</b> 始终开启。</li>'
     +'</ol>',
   appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li>左菜单 → <b>Socket Mode</b> → 开启 <b>Enable Socket Mode</b></li>'
-    +'<li>弹窗中输入令牌名称（如 "socket"）→ 添加范围 <code>connections:write</code> → <b>Generate</b></li>'
-    +'<li>复制令牌（以 <code>xapp-</code> 开头）</li>'
-    +'<li><i>或: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'<li><b>Basic Information</b> → <b>App-Level Tokens</b> → <b>Generate Token and Scopes</b></li>'
+    +'<li>名称随意，添加范围 <code>connections:write</code>。</li>'
+    +'<li>复制生成的 <b>App-Level Token</b>（<code>xapp-</code>开头）粘贴到这里。</li>'
     +'</ol>',
   appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'先输入频道名称，再打开这个 <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>。应用名和机器人名默认会使用 <b>{defaultName}</b>。在 Slack 中选择 <b>Create New App</b> → <b>From an app manifest</b> 后粘贴；如果想用别的机器人名字，粘贴后修改 name 即可。',
   platformSelectHint:'选择消息平台。',
@@ -1468,6 +1503,10 @@ zh:{
   toolsLabel:'工具',confirmDetachCron:'从此沙拉中分离"{name}"？',shutdownFailed:'关闭失败: ',
   confirmOk:'确认',serviceSingular:'沙拉',servicePlural:'沙拉',
   ok:'确认',
+  logs:'日志',errorLogs:'错误日志',noLogs:'没有错误。运行正常！',
+  logTime:'时间',logLevel:'级别',logMessage:'消息',
+  refreshLogs:'刷新',clearLogs:'清除',autoRefresh:'自动刷新',
+  confirmClearLogs:'清除所有错误日志？',
 },
 };
 let _lang=localStorage.getItem('agent-salad-lang')||(navigator.language.startsWith('ko')?'ko':navigator.language.startsWith('ja')?'ja':navigator.language.startsWith('zh')?'zh':'en');
@@ -1493,7 +1532,8 @@ function applyLang(){
   const m={secActive:'activeServices',secSaladDesc:'saladDesc',useCaseLink:'useCaseLink',secCreate:'createServiceDrag',secCreateDesc:'createServiceDesc',
     colAgents:'agents',colChannels:'channels',colTargets:'targets',colCrons:'crons',
     colAgDesc:'agentDesc',colChDesc:'channelDesc',colTgDesc:'targetDesc',
-    tabServices:'services',tabAgents:'agentsTab',tabSkills:'skills',
+    tabServices:'services',tabAgents:'agentsTab',tabSkills:'skills',tabLogs:'logs',
+    secLogs:'errorLogs',btnRefreshLogs:'refreshLogs',btnClearLogs:'clearLogs',lblAutoRefresh:'autoRefresh',
     secGoogle:'googleIntegration',secSkillsAll:'allSkills',
     modalTitle:'llmProviderKeys',saveSvcBtn:'createService',
     slotALabel:'agent',slotCLabel:'channel',slotTLabel:'target',
@@ -1585,9 +1625,12 @@ function getTargetListServiceIdSet(){
 function isTargetVisible(tg){
   if(!tg||tg.target_type==='everyone')return true;
   if(!hidePublicTargets)return true;
-  const linked=(D.services||[]).filter(function(svc){return svc.target_id===tg.id});
-  if(!linked.length)return true;
-  return linked.some(function(svc){return !isPublicDerivedService(svc)});
+  if(tg.creation_source==='everyone_template'){
+    const linked=(D.services||[]).filter(function(svc){return svc.target_id===tg.id});
+    if(!linked.length)return false;
+    return linked.some(function(svc){return !isPublicDerivedService(svc)});
+  }
+  return true;
 }
 
 function getVisibleTargetServiceCount(targetId){
@@ -2014,8 +2057,25 @@ async function submitAddChannel(){
   var pairBody={channelType:type,botToken:botToken};
   if(type==='slack')pairBody.appToken=config.appToken;
   var pr=await api('/api/channels/'+r.id+'/pair','POST',pairBody);
-  if(!pr.success)showAlert(t('pairingFailed')+(pr.error||'Unknown'),'❌');
+  if(!pr.success){showAlert(t('pairingFailed')+(pr.error||'Unknown'),'❌');return}
+  if(type==='discord'&&pr.botId){showDiscordInvite(pr.botId);load();return}
   closeDetail();load();
+}
+/** View Channels + Send Messages + Send Messages in Threads + Read Message History */
+var DISCORD_BOT_PERMS=274877975552;
+function showDiscordInvite(botId){
+  var url='https://discord.com/oauth2/authorize?client_id='+botId+'&permissions='+DISCORD_BOT_PERMS+'&scope=bot';
+  var panel=$('detailPanel');
+  panel.innerHTML=
+    '<div class="d-hdr"><h3>'+t('discordInvite')+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
+    '<div class="d-field"><div class="field-hint">'+t('discordInviteHint')+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:10px;align-items:center">'+
+        '<input id="discordInviteUrl" value="'+url+'" readonly style="flex:1;font-family:var(--mono);font-size:.7rem;padding:6px 8px;border:1px solid var(--s2);border-radius:6px;background:var(--s1);color:var(--t1)">'+
+        '<button class="btn btn-g" onclick="navigator.clipboard.writeText(document.getElementById(\\'discordInviteUrl\\').value);showAlert(t(\\'copied\\'),\\'✅\\')">'+t('copy')+'</button>'+
+      '</div>'+
+      '<div style="margin-top:14px;text-align:center"><a href="'+url+'" target="_blank" class="btn btn-p" style="text-decoration:none;display:inline-block;padding:8px 24px">'+t('discordInviteOpen')+' ↗</a></div>'+
+    '</div>'+
+    '<div class="d-actions"><button class="btn btn-g" onclick="closeDetail()">'+t('close')+'</button></div>';
 }
 
 function tgPlatHintFor(plat){
@@ -2231,7 +2291,7 @@ function openTargetDetail(id){
     '<div class="d-field"><label>'+t('targetType')+'</label><div class="d-val">'+(tt==='room'?t('targetTypeRoom'):(tt==='everyone'?t('targetTypeEveryone'):t('targetTypeUser')))+'</div></div>'+
     '<div class="d-field"><label>'+t('nickname')+'</label>'+(isEveryone?'<div class="d-val">'+esc(tg.nickname)+'</div>':'<input id="dTgNick" value="'+esc(tg.nickname).replace(/"/g,'&quot;')+'">')+'</div>'+
     '<div class="d-field"><label>'+((tt==='room')?t('roomId'):((tt==='everyone')?t('target'):t('platformUserId')))+'</label>'+(isEveryone?'<div class="d-val">'+esc(tg.target_id)+'</div>':'<input id="dTgId" value="'+esc(tg.target_id).replace(/"/g,'&quot;')+'">')+'</div>'+
-    (svcCount?'<div class="d-field"><label>Active Services</label><div class="d-val">'+svcCount+' service'+(svcCount>1?'s':'')+'</div></div>':'')+
+    (svcCount?'<div class="d-field"><label>'+t('activeServices')+'</label><div class="d-val">'+svcCount+' '+t(svcCount>1?'servicePlural':'serviceSingular')+'</div></div>':'')+
     '<div class="d-actions">'+
       (isEveryone?'':'<button class="btn btn-p" onclick="saveTargetDetail(\\''+tg.id+'\\')">'+t('save')+'</button>')+
       '<button class="btn btn-g" onclick="closeDetail()">'+t('cancel')+'</button>'+
@@ -2527,14 +2587,25 @@ function renderBlocks(){
 }
 
 function renderProviders(){
+  const docs=getProviderDocs();
   $('provRows').innerHTML=D.providers.map(p=>{
     const hasKey=!!p.api_key;
-    return '<div class="prov-row">'+
-      '<div class="prov-name">'+esc(p.name)+'</div>'+
-      '<div class="prov-key">'+(hasKey?'\\u2713 '+t('setLabel'):t('notSetLabel'))+'</div>'+
-      '<div class="prov-input"><input type="password" id="pk_'+p.id+'" placeholder="API Key"><button class="btn btn-g btn-sm" onclick="savePk(\\''+p.id+'\\')">'+t('save')+'</button>'+
-      (hasKey?'<button class="btn btn-d btn-sm" onclick="clearPk(\\''+p.id+'\\')">'+t('clear')+'</button>':'')+
-      '</div></div>'
+    const doc=docs[p.id]||{keyUrl:'#',name:p.name};
+    const badge=hasKey
+      ?'<span class="prov-badge set">\\u2713 '+esc(t('setLabel'))+'</span>'
+      :'<span class="prov-badge unset">'+esc(t('notSetLabel'))+'</span>';
+    const keyLink='<a href="'+esc(doc.keyUrl)+'" target="_blank" rel="noopener">'+esc(t('providerApiKeyLink').replace('{name}',doc.name))+' \\u2197</a>';
+    return '<div class="prov-card">'+
+      '<div class="prov-header">'+
+        '<div class="prov-name">'+esc(doc.name)+keyLink+'</div>'+
+        badge+
+      '</div>'+
+      '<div class="prov-input">'+
+        '<input type="password" id="pk_'+p.id+'" placeholder="'+esc(t('phApiKey'))+'">'+
+        '<button class="btn btn-g btn-sm" onclick="savePk(\\''+p.id+'\\')">'+esc(t('save'))+'</button>'+
+        (hasKey?'<button class="btn btn-d btn-sm" onclick="clearPk(\\''+p.id+'\\')">'+esc(t('clear'))+'</button>':'')+
+      '</div>'+
+    '</div>'
   }).join('');
 }
 
@@ -2713,6 +2784,39 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
   if (tab === 'agents') loadAgentsTab();
   if (tab === 'skills') loadSkillsTab();
+  if (tab === 'logs') loadErrorLogs();
+}
+
+// ── Error Logs ──
+let _logAutoTimer=null;
+async function loadErrorLogs(){
+  const res=await api('/api/error-logs?limit=200');
+  const logs=res?.logs||[];
+  const el=$('logList');
+  if(!logs.length){el.innerHTML='<div class="log-empty" id="logEmptyMsg">'+esc(t('noLogs'))+'</div>';return}
+  let h='<div class="log-hdr"><span>'+esc(t('logTime'))+'</span><span>'+esc(t('logLevel'))+'</span><span>'+esc(t('logMessage'))+'</span></div>';
+  for(const log of logs){
+    const ts=new Date(log.timestamp);
+    const timeStr=ts.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+ts.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const detailKeys=Object.keys(log.details||{}).filter(k=>k!=='stack');
+    const detailStr=detailKeys.length?detailKeys.map(k=>k+'='+JSON.stringify(log.details[k])).join(' '):'';
+    h+='<div class="log-entry">';
+    h+='<span class="log-ts">'+esc(timeStr)+'</span>';
+    h+='<span class="log-level '+log.level+'">'+esc(log.level)+'</span>';
+    h+='<div><span class="log-msg">'+esc(log.message)+'</span>';
+    if(detailStr)h+='<div class="log-details" title="'+esc(detailStr)+'">'+esc(detailStr.length>120?detailStr.slice(0,120)+'...':detailStr)+'</div>';
+    h+='</div></div>';
+  }
+  el.innerHTML=h;
+}
+async function clearErrorLogs(){
+  if(!await showConfirm(t('confirmClearLogs'),'🗑️'))return;
+  await api('/api/error-logs','DELETE');
+  loadErrorLogs();
+}
+function toggleLogAutoRefresh(on){
+  if(_logAutoTimer){clearInterval(_logAutoTimer);_logAutoTimer=null}
+  if(on)_logAutoTimer=setInterval(loadErrorLogs,5000);
 }
 function toggleSidebar(){
   const sb=$('sidebar'),ov=$('sidebarOverlay');
@@ -3360,6 +3464,7 @@ export function startWebUiServer(
           success: boolean;
           error?: string;
           botUsername?: string;
+          botId?: string;
         };
         if (channelType === 'discord') {
           result = await context.pairDiscordBot(channelId, botToken);
@@ -3763,6 +3868,18 @@ export function startWebUiServer(
         const serviceId = decodeURIComponent(parts[3]);
         const cronId = decodeURIComponent(parts[5]);
         context.detachCronFromService(serviceId, cronId);
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      // Error logs
+      if (url.pathname === '/api/error-logs' && req.method === 'GET') {
+        const limit = Number(url.searchParams.get('limit')) || 100;
+        sendJson(res, 200, { logs: getRecentErrors(limit) });
+        return;
+      }
+      if (url.pathname === '/api/error-logs' && req.method === 'DELETE') {
+        clearErrorBuffer();
         sendJson(res, 200, { ok: true });
         return;
       }

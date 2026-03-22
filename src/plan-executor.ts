@@ -197,7 +197,7 @@ export async function executePlan(deps: PlanExecutorDeps): Promise<void> {
           'Empty response during plan execution, aborting',
         );
         await sendNotification(
-          '⚠️ 에이전트가 빈 응답을 반환하여 실행 계획을 중단합니다.',
+          '⚠️ Agent returned an empty response — aborting the execution plan.',
         );
         deletePlanFile(agentId, serviceId);
         return;
@@ -223,7 +223,7 @@ export async function executePlan(deps: PlanExecutorDeps): Promise<void> {
       }
       savePlanFile(agentId, serviceId, plan);
       await sendNotification(
-        `⚠️ 배치 ${batchIdx + 1} 실행 중 오류가 발생하여 계획을 중단합니다.`,
+        `⚠️ An error occurred during batch ${batchIdx + 1} — aborting the plan.`,
       );
       deletePlanFile(agentId, serviceId);
       return;

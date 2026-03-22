@@ -275,6 +275,11 @@ function createSchema(database: Database.Database): void {
   safeAlter(`ALTER TABLE targets ADD COLUMN thumbnail TEXT`);
   safeAlter(`ALTER TABLE cron_jobs ADD COLUMN thumbnail TEXT`);
 
+  // targets provenance: 수동 생성 vs everyone 템플릿 자동 생성
+  safeAlter(
+    `ALTER TABLE targets ADD COLUMN creation_source TEXT NOT NULL DEFAULT 'manual'`,
+  );
+
   // 기존 레코드에 thumbnail 랜덤 배정
   const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
   const TA = ['🥩', '🍗', '🥚', '🧀', '🍤', '🥓', '🐟', '🦐', '🍖', '🥜'];
@@ -834,7 +839,7 @@ export function deleteManagedChannel(id: string): void {
 // ============================================================
 
 const TG_COLUMNS =
-  'id, target_id, nickname, platform, target_type, COALESCE(folder_name, target_id) AS folder_name, thumbnail, created_at, updated_at';
+  'id, target_id, nickname, platform, target_type, creation_source, COALESCE(folder_name, target_id) AS folder_name, thumbnail, created_at, updated_at';
 
 export function listTargets(): TargetProfile[] {
   return db
@@ -875,6 +880,7 @@ export function createTarget(input: {
   targetType?: TargetType;
   folderName?: string;
   thumbnail?: string;
+  creationSource?: 'manual' | 'everyone_template';
 }): void {
   const normalizedType = input.targetType ?? 'user';
   const normalizedTargetId =
@@ -897,13 +903,14 @@ export function createTarget(input: {
   }
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO targets (id, target_id, nickname, platform, target_type, folder_name, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO targets (id, target_id, nickname, platform, target_type, creation_source, folder_name, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     normalizedTargetId,
     normalizedNickname,
     input.platform,
     normalizedType,
+    input.creationSource ?? 'manual',
     normalizedFolderName,
     input.thumbnail ?? null,
     now,
@@ -1114,7 +1121,8 @@ export function listConcreteServicesForTemplate(
       `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.creation_source, s.spawned_from_template_service_id, s.status, s.created_at, s.updated_at,
               t.id AS target_internal_id, t.target_id AS target_platform_id,
               t.nickname AS target_nickname, t.platform AS target_platform,
-              t.target_type AS target_type, COALESCE(t.folder_name, t.target_id) AS target_folder_name,
+              t.target_type AS target_type, t.creation_source AS target_creation_source,
+              COALESCE(t.folder_name, t.target_id) AS target_folder_name,
               t.thumbnail AS target_thumbnail,
               t.created_at AS target_created_at, t.updated_at AS target_updated_at
        FROM services s
@@ -1133,6 +1141,7 @@ export function listConcreteServicesForTemplate(
       target_nickname: string;
       target_platform: ChannelType;
       target_type: TargetType;
+      target_creation_source: 'manual' | 'everyone_template';
       target_folder_name: string;
       target_thumbnail: string | null;
       target_created_at: string;
@@ -1156,6 +1165,7 @@ export function listConcreteServicesForTemplate(
       nickname: row.target_nickname,
       platform: row.target_platform,
       target_type: row.target_type,
+      creation_source: row.target_creation_source,
       folder_name: row.target_folder_name,
       thumbnail: row.target_thumbnail,
       created_at: row.target_created_at,
@@ -1227,10 +1237,36 @@ export function updateServiceStatus(
 }
 
 export function deleteService(id: string): void {
-  db.prepare(`DELETE FROM service_crons WHERE service_id = ?`).run(id);
-  db.prepare(`DELETE FROM conversation_archives WHERE service_id = ?`).run(id);
-  db.prepare(`DELETE FROM conversations WHERE service_id = ?`).run(id);
-  db.prepare(`DELETE FROM services WHERE id = ?`).run(id);
+  const txn = db.transaction(() => {
+    const childIds = db
+      .prepare(
+        `SELECT id FROM services WHERE spawned_from_template_service_id = ?`,
+      )
+      .all(id) as { id: string }[];
+    for (const child of childIds) {
+      db.prepare(`DELETE FROM service_crons WHERE service_id = ?`).run(
+        child.id,
+      );
+      db.prepare(`DELETE FROM conversation_archives WHERE service_id = ?`).run(
+        child.id,
+      );
+      db.prepare(`DELETE FROM conversations WHERE service_id = ?`).run(
+        child.id,
+      );
+    }
+    if (childIds.length) {
+      db.prepare(
+        `DELETE FROM services WHERE spawned_from_template_service_id = ?`,
+      ).run(id);
+    }
+    db.prepare(`DELETE FROM service_crons WHERE service_id = ?`).run(id);
+    db.prepare(`DELETE FROM conversation_archives WHERE service_id = ?`).run(
+      id,
+    );
+    db.prepare(`DELETE FROM conversations WHERE service_id = ?`).run(id);
+    db.prepare(`DELETE FROM services WHERE id = ?`).run(id);
+  });
+  txn();
 }
 
 // ============================================================

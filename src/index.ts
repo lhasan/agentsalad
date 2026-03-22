@@ -486,7 +486,7 @@ async function main(): Promise<void> {
           });
 
           await connectChannel(channelId);
-          return { success: true, botUsername: info.username };
+          return { success: true, botUsername: info.username, botId: info.id };
         } catch (err) {
           return {
             success: false,

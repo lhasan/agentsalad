@@ -187,6 +187,17 @@ export function createDiscordChannel(config: DiscordChannelConfig): Channel {
         // non-critical
       }
     },
+
+    async setTypingInRoom(roomId: string): Promise<void> {
+      try {
+        const ch = await client.channels.fetch(roomId).catch(() => null);
+        if (ch?.isTextBased() && 'sendTyping' in ch) {
+          await (ch as { sendTyping: () => Promise<void> }).sendTyping();
+        }
+      } catch {
+        // non-critical
+      }
+    },
   };
 }
 

@@ -15,8 +15,10 @@
  * 워크스페이스 3-depth: store/workspaces/<agent>/<channel>/<target>/
  * 최근 수정: 자동 생성 타겟은 target_id 기반 folder_name으로 워크스페이스를
  * 고정하고, 표시 닉네임은 프롬프트/화면 표시용으로만 사용한다.
- * 최근 수정: 퍼블릭 자동 생성은 everyone 템플릿만 사용하고, 생성 서비스에
- * provenance(creation_source, spawned_from_template_service_id)를 기록한다.
+ * 최근 수정: 동일 서비스에 대한 동시 메시지를 배치 큐잉하여 순차 처리.
+ * 처리 중 도착한 메시지는 DB에 저장 + pendingBatches에 누적, 현재 턴 완료 후
+ * 드레인 루프에서 일괄 LLM 호출. processServiceTurn으로 코어 파이프라인을 추출하여
+ * 정상 경로와 배치 드레인 양쪽에서 공유한다.
  */
 import {
   addConversationMessage,
@@ -62,13 +64,26 @@ const TYPING_INTERVAL_MS = 4_000;
 
 /**
  * 채널에 typing indicator를 주기적으로 전송하는 루프 시작.
- * 반환된 함수를 호출하면 루프 중지 + 'paused' 전송.
+ * roomId가 주어지면 room typing (Discord 서버 채널 등), 아니면 DM typing.
+ * 반환된 함수를 호출하면 루프 중지.
  */
 function startTypingLoop(
   channel: Channel | undefined,
   targetUserId: string,
+  roomId?: string,
 ): () => void {
-  if (!channel?.setTyping) return () => {};
+  if (roomId && channel?.setTypingInRoom) {
+    channel.setTypingInRoom(roomId, true).catch(() => {});
+    const interval = setInterval(() => {
+      channel.setTypingInRoom!(roomId, true).catch(() => {});
+    }, TYPING_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+      channel.setTypingInRoom!(roomId, false).catch(() => {});
+    };
+  }
+
+  if (!channel?.setTyping || !targetUserId) return () => {};
 
   channel.setTyping(targetUserId, true).catch(() => {});
   const interval = setInterval(() => {
@@ -116,6 +131,17 @@ const activeChannels = new Map<string, Channel>();
 /** Lock per service to prevent concurrent processing */
 const processingLocks = new Set<string>();
 
+/** 처리 중 도착한 메시지의 배치 대기열 (서비스별, 현재 턴 완료 시 드레인) */
+interface PendingBatch {
+  channelId: string;
+  senderUserId: string;
+  senderName: string;
+  context?: MessageContext;
+  count: number;
+}
+
+const pendingBatches = new Map<string, PendingBatch>();
+
 /**
  * Handle inbound message from any channel.
  * Finds matching service, builds context, calls provider, sends response.
@@ -162,6 +188,7 @@ function createTargetAndServiceFromTemplate(
       platform: channel.type,
       targetType,
       folderName: toFolderSlug(platformId),
+      creationSource: 'everyone_template',
     });
     logger.info(
       {
@@ -245,81 +272,32 @@ function resolveTemplateService(
 }
 
 /**
- * 메시지 처리 메인 함수. DM/room 분기 → 서비스 매칭 → LLM 호출 → 응답 전송.
+ * 서비스 턴 처리 코어: compaction → 히스토리 → 스킬 → LLM 호출 → 응답 전송.
+ * processMessage와 배치 드레인 양쪽에서 공유. 유저 메시지 DB 저장은 호출자 책임.
+ * @returns true if Smart Step plan executor took over (caller should stop draining)
  */
-async function processMessage(
+async function processServiceTurn(
+  serviceId: string,
+  agent: AgentProfile,
+  provider: LlmProvider,
+  targetId: string,
   channelId: string,
   senderUserId: string,
   senderName: string,
-  text: string,
   context?: MessageContext,
-): Promise<void> {
-  const isDM = !context || context.isDM;
-  const roomId = context?.roomId;
-
-  // --- 서비스 매칭 ---
-  let serviceMatch: ReturnType<typeof findActiveService>;
-
-  if (isDM) {
-    serviceMatch = findActiveService(channelId, senderUserId);
-    if (!serviceMatch) {
-      serviceMatch = resolveTemplateService(
-        channelId,
-        senderUserId,
-        senderName,
-        'user',
-      );
-    }
-  } else if (roomId) {
-    // 서버 채널 메시지: room 타겟 매칭
-    serviceMatch = findActiveServiceByRoom(channelId, roomId);
-    if (!serviceMatch) {
-      serviceMatch = resolveTemplateService(
-        channelId,
-        roomId,
-        `#${roomId}`,
-        'room',
-      );
-    }
-  } else {
-    serviceMatch = undefined;
-  }
-
-  if (!serviceMatch) {
-    logger.debug(
-      { channelId, senderUserId, isDM, roomId },
-      'No active service matched, ignoring',
-    );
-    return;
-  }
-
-  const { id: serviceId, agent, provider } = serviceMatch;
-
-  if (processingLocks.has(serviceId)) {
-    logger.debug(
-      { serviceId },
-      'Service is busy, message will be queued in conversation',
-    );
-    addConversationMessage(serviceId, 'user', text);
-    return;
-  }
-
-  processingLocks.add(serviceId);
-
+): Promise<boolean> {
   const channel = activeChannels.get(channelId);
-  const target = getTargetById(serviceMatch.target_id);
+  const target = getTargetById(targetId);
   const isRoomTarget = target?.target_type === 'room';
   const targetName = target?.nickname || senderName;
   const targetFolderName =
     target?.folder_name || target?.target_id || senderUserId;
+  const roomId = context?.roomId;
 
-  // typing 대상: DM은 유저에게, room은 typing 안 보냄 (채널 typing은 부자연스러움)
-  const typingTarget = isRoomTarget ? '' : senderUserId;
-  const stopTyping = typingTarget
-    ? startTypingLoop(channel, typingTarget)
-    : () => {};
+  const stopTyping = isRoomTarget
+    ? startTypingLoop(channel, '', roomId)
+    : startTypingLoop(channel, senderUserId);
 
-  // 응답 전송 헬퍼: DM은 sendMessage, room은 sendToRoom
   const sendResponse = async (responseText: string) => {
     if (!channel) return;
     if (isRoomTarget && roomId && channel.sendToRoom) {
@@ -334,8 +312,6 @@ async function processMessage(
   };
 
   try {
-    addConversationMessage(serviceId, 'user', text);
-
     const compacted = await compactIfNeeded({
       serviceId,
       providerId: provider.provider_key,
@@ -406,9 +382,9 @@ async function processMessage(
     if (!response.trim()) {
       logger.warn({ serviceId }, 'Empty response from provider');
       await sendResponse(
-        '⚠️ AI로부터 빈 응답을 받았습니다. 다시 시도해주세요.',
+        '⚠️ Received an empty response from AI. Please try again.',
       ).catch(() => {});
-      return;
+      return false;
     }
 
     addConversationMessage(serviceId, 'assistant', response);
@@ -452,9 +428,11 @@ async function processMessage(
             'Plan execution failed',
           );
         });
-        return;
+        return true;
       }
     }
+
+    return false;
   } catch (err) {
     stopTyping();
 
@@ -470,8 +448,127 @@ async function processMessage(
         'Service message processing error',
       );
       await sendResponse(
-        '⚠️ 메시지 처리 중 알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        '⚠️ An unexpected error occurred while processing your message. Please try again shortly.',
       ).catch(() => {});
+    }
+    return false;
+  }
+}
+
+/**
+ * 메시지 처리 메인 함수. DM/room 분기 → 서비스 매칭 → 배치 큐잉 → LLM 호출 → 응답 전송.
+ * 처리 중 도착한 메시지는 pendingBatches에 누적, 현재 턴 완료 후 드레인 루프로 일괄 처리.
+ */
+async function processMessage(
+  channelId: string,
+  senderUserId: string,
+  senderName: string,
+  text: string,
+  context?: MessageContext,
+): Promise<void> {
+  const isDM = !context || context.isDM;
+  const roomId = context?.roomId;
+
+  // --- 서비스 매칭 ---
+  let serviceMatch: ReturnType<typeof findActiveService>;
+
+  if (isDM) {
+    serviceMatch = findActiveService(channelId, senderUserId);
+    if (!serviceMatch) {
+      serviceMatch = resolveTemplateService(
+        channelId,
+        senderUserId,
+        senderName,
+        'user',
+      );
+    }
+  } else if (roomId) {
+    serviceMatch = findActiveServiceByRoom(channelId, roomId);
+    if (!serviceMatch) {
+      serviceMatch = resolveTemplateService(
+        channelId,
+        roomId,
+        `#${roomId}`,
+        'room',
+      );
+    }
+  } else {
+    serviceMatch = undefined;
+  }
+
+  if (!serviceMatch) {
+    logger.debug(
+      { channelId, senderUserId, isDM, roomId },
+      'No active service matched, ignoring',
+    );
+    return;
+  }
+
+  const { id: serviceId, agent, provider } = serviceMatch;
+
+  // 처리 중이면 DB 저장 + 배치 대기열에 추가 (현재 턴 완료 후 일괄 처리)
+  if (processingLocks.has(serviceId)) {
+    addConversationMessage(serviceId, 'user', text);
+    const existing = pendingBatches.get(serviceId);
+    if (existing) {
+      existing.count++;
+      existing.senderUserId = senderUserId;
+      existing.senderName = senderName;
+      existing.context = context;
+    } else {
+      pendingBatches.set(serviceId, {
+        channelId,
+        senderUserId,
+        senderName,
+        context,
+        count: 1,
+      });
+    }
+    logger.debug(
+      { serviceId, pendingCount: pendingBatches.get(serviceId)!.count },
+      'Service busy, message queued for batch processing',
+    );
+    return;
+  }
+
+  processingLocks.add(serviceId);
+
+  try {
+    addConversationMessage(serviceId, 'user', text);
+
+    const planStarted = await processServiceTurn(
+      serviceId,
+      agent,
+      provider,
+      serviceMatch.target_id,
+      channelId,
+      senderUserId,
+      senderName,
+      context,
+    );
+    if (planStarted) return;
+
+    // 처리 중 쌓인 배치 메시지 드레인 (while: 드레인 중 추가 메시지 대응)
+    while (pendingBatches.has(serviceId)) {
+      const batch = pendingBatches.get(serviceId)!;
+      pendingBatches.delete(serviceId);
+
+      logger.info(
+        { serviceId, batchCount: batch.count },
+        'Draining batched messages',
+      );
+
+      const batchPlanStarted = await processServiceTurn(
+        serviceId,
+        agent,
+        provider,
+        serviceMatch.target_id,
+        batch.channelId,
+        batch.senderUserId,
+        batch.senderName,
+        batch.context,
+      );
+      if (batchPlanStarted) return;
     }
   } finally {
     processingLocks.delete(serviceId);
@@ -754,8 +851,10 @@ export async function processCronMessage(
     const cronTargetFolderName = target?.folder_name || platformUserId;
     const isRoomTarget = target?.target_type === 'room';
 
-    if (notify && platformUserId && !isRoomTarget) {
-      stopCronTyping = startTypingLoop(channel, platformUserId);
+    if (notify && platformUserId) {
+      stopCronTyping = isRoomTarget
+        ? startTypingLoop(channel, '', platformUserId)
+        : startTypingLoop(channel, platformUserId);
     }
 
     await compactIfNeeded({

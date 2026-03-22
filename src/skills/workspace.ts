@@ -7,6 +7,7 @@
  *   store/workspaces/<agent>/<channel>/<target>/  — 채널→타겟 개인 폴더 (파일 도구 루트)
  *
  * 커스텀 스킬: store/skills/<folder_name>/ — 사용자/LLM 에이전트가 직접 편집하는 스킬 폴더.
+ * 크로스 플랫폼: run.sh(macOS/Linux) + run.cmd(Windows) 양쪽 템플릿 생성.
  *
  * 폴더명은 folder_name 기준으로 고정되고, 표시명과 분리된다.
  * 인메모리 맵(id → folder_name)으로 경로 해석.
@@ -217,11 +218,17 @@ export function getSkillScriptDir(skillId: string): string {
 }
 
 export function getSkillScriptPath(skillId: string): string {
-  return join(SKILLS_ROOT, resolveFolderName(skillId), 'run.sh');
+  const dir = join(SKILLS_ROOT, resolveFolderName(skillId));
+  if (process.platform === 'win32') {
+    const cmdPath = join(dir, 'run.cmd');
+    if (existsSync(cmdPath)) return cmdPath;
+  }
+  return join(dir, 'run.sh');
 }
 
 export function skillScriptExists(skillId: string): boolean {
-  return existsSync(getSkillScriptPath(skillId));
+  const dir = join(SKILLS_ROOT, resolveFolderName(skillId));
+  return existsSync(join(dir, 'run.sh')) || existsSync(join(dir, 'run.cmd'));
 }
 
 export function getSkillSchemaPath(skillId: string): string {
@@ -256,7 +263,8 @@ export function renameSkillFolder(
  * 이미 존재하는 파일은 덮어쓰지 않음 (사용자/에이전트 편집 보존).
  *
  * 생성되는 파일:
- *   run.sh      — 실행 진입점 (최소한의 구조만)
+ *   run.sh      — 실행 진입점 (macOS/Linux)
+ *   run.cmd     — 실행 진입점 (Windows)
  *   schema.json — LLM 도구 입력 파라미터 정의
  *   prompt.txt  — LLM에게 도구 사용법을 알려주는 시스템 프롬프트 조각
  *   GUIDE.md    — 사람/LLM 에이전트를 위한 종합 지침서
@@ -264,13 +272,15 @@ export function renameSkillFolder(
 export function ensureSkillScript(skillId: string, toolName: string): string {
   const dir = getSkillScriptDir(skillId);
   const scriptPath = getSkillScriptPath(skillId);
+  const shPath = join(dir, 'run.sh');
+  const cmdPath = join(dir, 'run.cmd');
   const schemaPath = getSkillSchemaPath(skillId);
   const promptPath = getSkillPromptPath(skillId);
   const guidePath = getSkillGuidePath(skillId);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-  if (!existsSync(scriptPath)) {
-    const template = `#!/bin/bash
+  if (!existsSync(shPath)) {
+    const shTemplate = `#!/bin/bash
 # ${toolName} — Agent Salad Custom Skill
 # 상세 지침: 같은 폴더의 GUIDE.md 참조
 
@@ -278,12 +288,24 @@ SKILL_DIR=$(dirname "$0")
 
 echo "TODO: ${toolName} — 이 파일을 편집하세요. GUIDE.md를 읽고 구현하세요."
 `;
-    writeFileSync(scriptPath, template, { mode: 0o755 });
+    writeFileSync(shPath, shTemplate, { mode: 0o755 });
     try {
-      chmodSync(scriptPath, 0o755);
+      chmodSync(shPath, 0o755);
     } catch {
       /* chmod 미지원 환경 */
     }
+  }
+
+  if (!existsSync(cmdPath)) {
+    const cmdTemplate = `@echo off\r
+REM ${toolName} — Agent Salad Custom Skill\r
+REM 상세 지침: 같은 폴더의 GUIDE.md 참조\r
+\r
+set "SKILL_DIR=%~dp0"\r
+\r
+echo TODO: ${toolName} — 이 파일을 편집하세요. GUIDE.md를 읽고 구현하세요.\r
+`;
+    writeFileSync(cmdPath, cmdTemplate, 'utf-8');
   }
 
   if (!existsSync(schemaPath)) {
@@ -328,7 +350,8 @@ function buildGuideContent(toolName: string, skillId: string): string {
 
 \`\`\`
 store/skills/${skillId}/
-├── run.sh          실행 진입점 (bash). 이것만 실행됩니다.
+├── run.sh          실행 진입점 (macOS/Linux)
+├── run.cmd         실행 진입점 (Windows)
 ├── schema.json     LLM이 도구에 넘기는 파라미터 정의
 ├── prompt.txt      LLM에게 도구 사용법을 알려주는 시스템 프롬프트
 ├── GUIDE.md        이 파일. 구현 지침서.
@@ -338,38 +361,48 @@ store/skills/${skillId}/
 이 폴더 자체가 스킬의 프로젝트 폴더입니다.
 Node.js, Python, 셸 스크립트 등 어떤 프로젝트든 통째로 여기에 놓으세요.
 
+## 크로스 플랫폼
+
+| 플랫폼 | 실행 파일 | 셸 |
+|--------|-----------|-----|
+| macOS / Linux | \`run.sh\` | bash |
+| Windows | \`run.cmd\` | cmd.exe |
+
+양쪽 파일을 모두 유지하면 스킬이 어느 OS에서든 동작합니다.
+Node.js/Python 기반이라면 실제 로직은 .js/.py에 두고, run.sh와 run.cmd는 런처 역할만 하는 것을 권장합니다.
+
 ## 실행 환경
 
-| 항목 | 값 |
-|------|-----|
-| 실행 방식 | \`bash run.sh\` |
-| \`SKILL_DIR\` | \`$(dirname "$0")\` — 이 폴더의 절대 경로 |
-| cwd (작업 디렉토리) | 에이전트 워크스페이스 (\`store/workspaces/<agent>/\`) |
-| 타임아웃 | 기본 30초. 초과 시 SIGTERM |
-| stdout | → LLM이 읽는 도구 응답 (결과 텍스트) |
-| stderr | → 에러 시 LLM에 전달 (디버그 로그용) |
-| exit code | 0 = 성공, 그 외 = 에러 |
+| 항목 | macOS/Linux | Windows |
+|------|-------------|---------|
+| 실행 방식 | \`bash run.sh\` | \`run.cmd\` |
+| 스킬 폴더 경로 | \`SKILL_DIR=$(dirname "$0")\` | \`set "SKILL_DIR=%~dp0"\` |
+| cwd (작업 디렉토리) | 에이전트 워크스페이스 (\`store/workspaces/<agent>/\`) | 동일 |
+| 타임아웃 | 기본 30초 | 동일 |
+| stdout | → LLM이 읽는 도구 응답 (결과 텍스트) | 동일 |
+| stderr | → 에러 시 LLM에 전달 (디버그 로그용) | 동일 |
+| exit code | 0 = 성공, 그 외 = 에러 | 동일 |
 
 ### 두 경로의 역할
 
 | 변수 | 경로 | 용도 |
 |------|------|------|
 | \`SKILL_DIR\` | \`store/skills/<skill>/\` | **코드 + 설정** (불변). run.sh, collect.js, config 등 |
-| \`$PWD\` (cwd) | \`store/workspaces/<agent>/\` | **실행 결과 + 임시 데이터**. 에이전트가 read_file/list_files로 접근 가능 |
+| \`$PWD\` / \`%CD%\` (cwd) | \`store/workspaces/<agent>/\` | **실행 결과 + 임시 데이터**. 에이전트가 read_file/list_files로 접근 가능 |
 
-> **핵심 원칙**: 스크립트가 생성하는 결과물(output)은 **반드시 \`$PWD\`(워크스페이스)**에 저장하세요.
+> **핵심 원칙**: 스크립트가 생성하는 결과물(output)은 **반드시 cwd(워크스페이스)**에 저장하세요.
 > \`SKILL_DIR\`에 저장하면 에이전트가 파일을 읽을 수 없습니다.
 > 같은 스킬을 여러 에이전트가 사용해도, 각자의 워크스페이스에 결과가 격리됩니다.
 
 stdout에 출력한 내용이 LLM에게 결과로 전달됩니다.
-결과를 \`$PWD\`에 파일로 저장하고, 요약만 stdout에 출력하는 것을 권장합니다.
+결과를 워크스페이스에 파일로 저장하고, 요약만 stdout에 출력하는 것을 권장합니다.
 
 ## 입력 (LLM → 스크립트)
 
 \`schema.json\`에 정의한 파라미터가 세 가지 방식으로 전달됩니다:
 
 1. **환경변수** \`INPUT_<NAME>\` — 파라미터명을 대문자로 변환
-   예: schema에 \`"query"\` 정의 → \`$INPUT_QUERY\`로 접근
+   예: schema에 \`"query"\` 정의 → bash: \`$INPUT_QUERY\`, cmd: \`%INPUT_QUERY%\`
 2. **환경변수** \`INPUT_JSON\` — 전체 입력을 JSON 문자열로
 3. **stdin** — 파이프로 JSON 읽기 가능
 
@@ -400,53 +433,42 @@ ${toolName} 도구를 사용하세요. lookback_hours 파라미터로
 
 ## 실전 예시
 
-### A. Node.js 프로젝트 — 코드는 스킬 폴더, 결과는 워크스페이스
+### A. Node.js — 크로스 플랫폼 권장 패턴
+
+**run.sh** (macOS/Linux):
 \`\`\`bash
 SKILL_DIR=$(dirname "$0")
-
-# 코드 실행: 스킬 폴더의 스크립트
-# 결과 저장: $PWD (에이전트 워크스페이스)
 export OUTPUT_DIR="$PWD/collect-output"
 mkdir -p "$OUTPUT_DIR"
 node "$SKILL_DIR/collect.js" 2>/dev/null
-
-# stdout으로 요약만 출력
 cat "$OUTPUT_DIR/summary.md"
+\`\`\`
+
+**run.cmd** (Windows):
+\`\`\`cmd
+@echo off
+set "SKILL_DIR=%~dp0"
+set "OUTPUT_DIR=%CD%\\collect-output"
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
+node "%SKILL_DIR%collect.js" 2>nul
+type "%OUTPUT_DIR%\\summary.md"
 \`\`\`
 
 ### B. Python + 파라미터
 \`\`\`bash
 SKILL_DIR=$(dirname "$0")
-# 결과를 워크스페이스에 저장하고 stdout에 출력
 python3 "$SKILL_DIR/main.py" --query "$INPUT_QUERY" --output-dir "$PWD"
 \`\`\`
 
-### C. 설정은 스킬 폴더, 결과는 워크스페이스
-\`\`\`bash
-SKILL_DIR=$(dirname "$0")
-export MY_CONFIG="$SKILL_DIR/config.yaml"    # 설정 → 스킬 폴더 (불변)
-export MY_OUTPUT="$PWD/report-output"        # 결과 → 워크스페이스 (에이전트 접근 가능)
-mkdir -p "$MY_OUTPUT"
-node "$SKILL_DIR/run.js" 2>/dev/null
-cat "$MY_OUTPUT/summary.md"
-\`\`\`
-
-### D. 단순 API 호출 (파일 저장 불필요, stdout으로 직접 반환)
+### C. 단순 API 호출 (파일 저장 불필요)
 \`\`\`bash
 curl -s "https://api.example.com/data?q=$INPUT_QUERY"
-\`\`\`
-
-### E. 파라미터 없이 실행, 결과 파일은 워크스페이스에
-\`\`\`bash
-SKILL_DIR=$(dirname "$0")
-python3 "$SKILL_DIR/daily_report.py" --output "$PWD/daily-report.md"
-cat "$PWD/daily-report.md"
 \`\`\`
 
 ## 주의사항
 
 ### 타임아웃 (30초)
-기본 30초. 초과 시 SIGTERM으로 강제 종료됩니다.
+기본 30초. 초과 시 강제 종료됩니다.
 오래 걸리는 작업은 사전 캐싱이나 최적화로 대응하세요.
 
 ### 크론 + 긴 스크립트 = 프로세스 증식
@@ -455,15 +477,15 @@ cat "$PWD/daily-report.md"
 
 ### 백그라운드 프로세스 금지
 \`nohup\`, \`&\`, \`daemon\` 등으로 자식 프로세스를 분리하지 마세요.
-\`run.sh\`가 종료되어도 자식이 살아남아 리소스를 소모합니다.
+스크립트가 종료되어도 자식이 살아남아 리소스를 소모합니다.
 
 ### stdout 관리
-디버그 로그는 stderr로: \`echo "debug" >&2\`
+디버그 로그는 stderr로: bash \`echo "debug" >&2\`, cmd \`echo debug 1>&2\`
 stdout의 모든 내용이 LLM 응답 토큰을 소비합니다.
-거대한 파일을 cat하면 토큰 낭비 + 컨텍스트 초과 위험.
+거대한 파일을 cat/type하면 토큰 낭비 + 컨텍스트 초과 위험.
 
 ### 인터랙티브 입력 불가
-\`read\`, \`input()\` 등 사용자 입력 대기 코드는 hang됩니다.
+\`read\`, \`input()\`, \`set /p\` 등 사용자 입력 대기 코드는 hang됩니다.
 모든 입력은 환경변수/stdin JSON으로 받으세요.
 
 ### 의존성은 미리 설치

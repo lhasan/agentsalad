@@ -122,6 +122,7 @@ Full conversation backup before each compaction. One row per compaction event.
 | `nickname` | TEXT | Display name (room targets use `#channel-name` convention) |
 | `platform` | TEXT | `telegram` / `discord` / `slack` (ChannelType) |
 | `target_type` | TEXT | `user` (DM target) / `room` (channel/thread target) / `everyone` (default auto-create template). Default `user` |
+| `creation_source` | TEXT | `manual` or `everyone_template`. Default `manual` |
 | `folder_name` | TEXT | Stable workspace folder key. Auto-created targets use ID-based slug instead of nickname |
 | `thumbnail` | TEXT | Food emoji thumbnail (randomly assigned) |
 | `created_at` | TEXT | |

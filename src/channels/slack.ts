@@ -8,6 +8,8 @@
  * @멘션 감지: <@봇ID> 패턴 → 멘션 텍스트 제거 후 LLM에 전달.
  * sendToRoom(): 채널/스레드에 메시지 전송 (thread_ts로 스레드 응답 지원).
  * Slack 메시지 제한: 약 40,000자 (안전 분할 4,000자 단위).
+ * Typing 대체: Slack Bot API에 typing indicator가 없어 placeholder 메시지
+ * ("Thinking...")를 보낸 뒤 응답 완료 시 삭제하는 workaround 사용.
  */
 import { App, LogLevel } from '@slack/bolt';
 
@@ -46,6 +48,36 @@ export function createSlackChannel(config: SlackChannelConfig): Channel {
   let connected = false;
   let botUserId = '';
   let botName = '';
+
+  /** Placeholder messages posted as typing indicator (targetKey → { channel, ts }) */
+  const typingPlaceholders = new Map<string, { channel: string; ts: string }>();
+
+  async function postPlaceholder(targetKey: string, channelOrUserId: string, threadTs?: string): Promise<void> {
+    if (typingPlaceholders.has(targetKey)) return;
+    try {
+      const result = await app.client.chat.postMessage({
+        channel: channelOrUserId,
+        text: '⏳ Thinking...',
+        ...(threadTs ? { thread_ts: threadTs } : {}),
+      });
+      if (result.ts && result.channel) {
+        typingPlaceholders.set(targetKey, { channel: result.channel, ts: result.ts });
+      }
+    } catch {
+      // non-critical — typing indicator is best-effort
+    }
+  }
+
+  async function deletePlaceholder(targetKey: string): Promise<void> {
+    const info = typingPlaceholders.get(targetKey);
+    if (!info) return;
+    typingPlaceholders.delete(targetKey);
+    try {
+      await app.client.chat.delete({ channel: info.channel, ts: info.ts });
+    } catch {
+      // non-critical — message may already be gone
+    }
+  }
 
   app.message(async ({ message }) => {
     if (message.subtype) return;
@@ -181,8 +213,22 @@ export function createSlackChannel(config: SlackChannelConfig): Channel {
       logger.info({ channelId }, 'Slack bot disconnected');
     },
 
-    async setTyping(): Promise<void> {
-      // Slack has no typing indicator API for bots
+    async setTyping(targetUserId: string, isTyping: boolean): Promise<void> {
+      const key = `dm:${targetUserId}`;
+      if (isTyping) {
+        await postPlaceholder(key, targetUserId);
+      } else {
+        await deletePlaceholder(key);
+      }
+    },
+
+    async setTypingInRoom(roomId: string, isTyping: boolean): Promise<void> {
+      const key = `room:${roomId}`;
+      if (isTyping) {
+        await postPlaceholder(key, roomId);
+      } else {
+        await deletePlaceholder(key);
+      }
     },
   };
 }
