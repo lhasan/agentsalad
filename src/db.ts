@@ -2,13 +2,19 @@
  * Agent Salad - Database Layer
  *
  * 단일 SQLite DB (store/messages.db)로 모든 상태 관리.
- * Agent + Channel + Target = Service 모델. Target은 user(DM) 또는 room(채널/스레드).
- * 멀티채널: Telegram/Discord/Slack. managed_channels.type + auto_session 플래그.
- * targets.target_type: 'user'(DM 대상) / 'room'(채널/스레드 대상) 구분.
+ * Agent + Channel + Target = Service 모델. Target은 user(DM), room(채널/스레드),
+ * everyone(기본 자동 생성 템플릿)로 구분된다.
+ * 멀티채널: Telegram/Discord/Slack. managed_channels.type 기반으로 채널을 구분한다.
+ * targets.target_type: 'user'(DM 대상) / 'room'(채널/스레드 대상) /
+ * 'everyone'(기본 자동 생성 템플릿) 구분.
  * findActiveServiceByRoom(): room 타겟 매칭 (서버 채널 내 메시지 → 방 타겟 서비스).
  * 서비스 크론: cron_jobs + service_crons 테이블로 예약 작업 지원.
  * 커스텀 스킬: custom_skills + agent_custom_skills로 스크립트 기반 스킬 관리.
  * 스마트 스텝: agent_profiles.smart_step/max_plan_steps + hasNewUserMessages() 인터럽트 감지.
+ * 최근 수정: targets.folder_name을 추가해 자동 생성 타겟의 워크스페이스 경로를
+ * 닉네임 변경과 분리된 안정 식별자로 유지한다.
+ * 최근 수정: services.creation_source로 수동 생성과 everyone 템플릿 생성분을
+ * 구분하고, legacy auto_session fallback은 폐기했다.
  */
 import Database from 'better-sqlite3';
 import fs from 'fs';
@@ -20,6 +26,8 @@ import {
   AgentProfile,
   type ChannelType,
   type TargetType,
+  EVERYONE_TARGET_NICKNAME,
+  getEveryoneTargetId,
   ConversationMessage,
   CronJob,
   CustomSkill,
@@ -65,6 +73,7 @@ function createSchema(database: Database.Database): void {
       id TEXT PRIMARY KEY,
       target_id TEXT NOT NULL UNIQUE,
       nickname TEXT NOT NULL,
+      folder_name TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -75,12 +84,15 @@ function createSchema(database: Database.Database): void {
       agent_profile_id TEXT NOT NULL,
       channel_id TEXT NOT NULL,
       target_id TEXT NOT NULL,
+      creation_source TEXT NOT NULL DEFAULT 'manual',
+      spawned_from_template_service_id TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (agent_profile_id) REFERENCES agent_profiles(id),
       FOREIGN KEY (channel_id) REFERENCES managed_channels(id),
-      FOREIGN KEY (target_id) REFERENCES targets(id)
+      FOREIGN KEY (target_id) REFERENCES targets(id),
+      FOREIGN KEY (spawned_from_template_service_id) REFERENCES services(id)
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_service_channel_target
       ON services(channel_id, target_id);
@@ -224,6 +236,7 @@ function createSchema(database: Database.Database): void {
   safeAlter(`ALTER TABLE agent_profiles ADD COLUMN folder_name TEXT`);
   safeAlter(`ALTER TABLE custom_skills ADD COLUMN folder_name TEXT`);
   safeAlter(`ALTER TABLE managed_channels ADD COLUMN folder_name TEXT`);
+  safeAlter(`ALTER TABLE targets ADD COLUMN folder_name TEXT`);
 
   // time_aware: 시간 인지 모드 (타임스탬프 포함 + 현재 시간 시스템 프롬프트)
   safeAlter(
@@ -243,9 +256,17 @@ function createSchema(database: Database.Database): void {
     `ALTER TABLE targets ADD COLUMN target_type TEXT NOT NULL DEFAULT 'user'`,
   );
 
-  // auto_session: 미등록 유저/방 자동 세션 생성 (Discord/Slack용)
+  // auto_session: 레거시 필드 유지 (런타임에서는 사용하지 않음)
   safeAlter(
     `ALTER TABLE managed_channels ADD COLUMN auto_session INTEGER NOT NULL DEFAULT 0`,
+  );
+
+  // services provenance: 수동 생성 vs everyone 템플릿 자동 생성
+  safeAlter(
+    `ALTER TABLE services ADD COLUMN creation_source TEXT NOT NULL DEFAULT 'manual'`,
+  );
+  safeAlter(
+    `ALTER TABLE services ADD COLUMN spawned_from_template_service_id TEXT`,
   );
 
   // thumbnail: 카테고리별 재료 이모지 (랜덤 배정)
@@ -813,21 +834,17 @@ export function deleteManagedChannel(id: string): void {
 // ============================================================
 
 const TG_COLUMNS =
-  'id, target_id, nickname, platform, target_type, thumbnail, created_at, updated_at';
+  'id, target_id, nickname, platform, target_type, COALESCE(folder_name, target_id) AS folder_name, thumbnail, created_at, updated_at';
 
 export function listTargets(): TargetProfile[] {
   return db
-    .prepare(
-      `SELECT ${TG_COLUMNS} FROM targets ORDER BY created_at DESC`,
-    )
+    .prepare(`SELECT ${TG_COLUMNS} FROM targets ORDER BY created_at DESC`)
     .all() as TargetProfile[];
 }
 
 export function getTargetById(id: string): TargetProfile | undefined {
   return db
-    .prepare(
-      `SELECT ${TG_COLUMNS} FROM targets WHERE id = ?`,
-    )
+    .prepare(`SELECT ${TG_COLUMNS} FROM targets WHERE id = ?`)
     .get(id) as TargetProfile | undefined;
 }
 
@@ -835,10 +852,19 @@ export function getTargetByTargetId(
   targetId: string,
 ): TargetProfile | undefined {
   return db
-    .prepare(
-      `SELECT ${TG_COLUMNS} FROM targets WHERE target_id = ?`,
-    )
+    .prepare(`SELECT ${TG_COLUMNS} FROM targets WHERE target_id = ?`)
     .get(targetId) as TargetProfile | undefined;
+}
+
+export function getTargetByTargetIdAndType(
+  targetId: string,
+  targetType: Exclude<TargetType, 'everyone'>,
+): TargetProfile | undefined {
+  return db
+    .prepare(
+      `SELECT ${TG_COLUMNS} FROM targets WHERE target_id = ? AND target_type = ?`,
+    )
+    .get(targetId, targetType) as TargetProfile | undefined;
 }
 
 export function createTarget(input: {
@@ -847,26 +873,38 @@ export function createTarget(input: {
   nickname: string;
   platform: ChannelType;
   targetType?: TargetType;
+  folderName?: string;
   thumbnail?: string;
 }): void {
-  const dup = db
-    .prepare(
-      `SELECT id FROM targets WHERE platform = ? AND nickname = ?`,
-    )
-    .get(input.platform, input.nickname) as { id: string } | undefined;
-  if (dup)
-    throw new Error(
-      `같은 플랫폼(${input.platform})에 동일한 닉네임이 이미 존재합니다: ${input.nickname}`,
-    );
+  const normalizedType = input.targetType ?? 'user';
+  const normalizedTargetId =
+    normalizedType === 'everyone'
+      ? getEveryoneTargetId(input.platform)
+      : input.targetId;
+  const normalizedNickname =
+    normalizedType === 'everyone'
+      ? EVERYONE_TARGET_NICKNAME
+      : input.nickname.trim();
+  const normalizedFolderName = input.folderName ?? normalizedTargetId;
+  if (normalizedType !== 'everyone') {
+    const dup = db
+      .prepare(`SELECT id FROM targets WHERE platform = ? AND nickname = ?`)
+      .get(input.platform, normalizedNickname) as { id: string } | undefined;
+    if (dup)
+      throw new Error(
+        `같은 플랫폼(${input.platform})에 동일한 닉네임이 이미 존재합니다: ${normalizedNickname}`,
+      );
+  }
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO targets (id, target_id, nickname, platform, target_type, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO targets (id, target_id, nickname, platform, target_type, folder_name, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
-    input.targetId,
-    input.nickname,
+    normalizedTargetId,
+    normalizedNickname,
     input.platform,
-    input.targetType ?? 'user',
+    normalizedType,
+    normalizedFolderName,
     input.thumbnail ?? null,
     now,
     now,
@@ -880,35 +918,51 @@ export function updateTarget(
     nickname?: string;
     platform?: ChannelType;
     targetType?: TargetType;
+    folderName?: string;
   },
 ): void {
+  const current = getTargetById(id);
+  if (!current) return;
+  if (current.target_type === 'everyone') {
+    throw new Error('everyone target is system-managed and cannot be edited');
+  }
+  const finalPlatform = updates.platform ?? current.platform;
+  const finalType = updates.targetType ?? current.target_type;
+  const finalNickname =
+    finalType === 'everyone'
+      ? EVERYONE_TARGET_NICKNAME
+      : (updates.nickname ?? current.nickname);
+
   // 닉네임 또는 플랫폼 변경 시 중복 체크
-  if (updates.nickname !== undefined || updates.platform !== undefined) {
-    const current = getTargetById(id);
-    if (current) {
-      const finalNick = updates.nickname ?? current.nickname;
-      const finalPlat = updates.platform ?? current.platform;
-      const dup = db
-        .prepare(
-          `SELECT id FROM targets WHERE platform = ? AND nickname = ? AND id != ?`,
-        )
-        .get(finalPlat, finalNick, id) as { id: string } | undefined;
-      if (dup)
-        throw new Error(
-          `같은 플랫폼(${finalPlat})에 동일한 닉네임이 이미 존재합니다: ${finalNick}`,
-        );
-    }
+  if (
+    updates.nickname !== undefined ||
+    updates.platform !== undefined ||
+    updates.targetType !== undefined
+  ) {
+    const dup = db
+      .prepare(
+        `SELECT id FROM targets WHERE platform = ? AND nickname = ? AND id != ?`,
+      )
+      .get(finalPlatform, finalNickname, id) as { id: string } | undefined;
+    if (dup)
+      throw new Error(
+        `같은 플랫폼(${finalPlatform})에 동일한 닉네임이 이미 존재합니다: ${finalNickname}`,
+      );
   }
 
   const fields: string[] = [];
   const values: unknown[] = [];
-  if (updates.targetId !== undefined) {
+  if (updates.targetId !== undefined || finalType === 'everyone') {
     fields.push('target_id = ?');
-    values.push(updates.targetId);
+    values.push(
+      finalType === 'everyone'
+        ? getEveryoneTargetId(finalPlatform)
+        : (updates.targetId ?? current.target_id),
+    );
   }
-  if (updates.nickname !== undefined) {
+  if (updates.nickname !== undefined || updates.targetType === 'everyone') {
     fields.push('nickname = ?');
-    values.push(updates.nickname);
+    values.push(finalNickname);
   }
   if (updates.platform !== undefined) {
     fields.push('platform = ?');
@@ -917,6 +971,10 @@ export function updateTarget(
   if (updates.targetType !== undefined) {
     fields.push('target_type = ?');
     values.push(updates.targetType);
+  }
+  if (updates.folderName !== undefined) {
+    fields.push('folder_name = ?');
+    values.push(updates.folderName);
   }
   if (fields.length === 0) return;
   fields.push('updated_at = ?');
@@ -928,6 +986,10 @@ export function updateTarget(
 }
 
 export function deleteTarget(id: string): void {
+  const target = getTargetById(id);
+  if (target?.target_type === 'everyone') {
+    throw new Error('everyone target is system-managed and cannot be deleted');
+  }
   const txn = db.transaction(() => {
     db.prepare(
       `DELETE FROM conversation_archives WHERE service_id IN (SELECT id FROM services WHERE target_id = ?)`,
@@ -960,7 +1022,7 @@ export function deleteTarget(id: string): void {
 export function listServices(): Service[] {
   return db
     .prepare(
-      `SELECT id, agent_profile_id, channel_id, target_id, status, created_at, updated_at FROM services ORDER BY created_at DESC`,
+      `SELECT id, agent_profile_id, channel_id, target_id, creation_source, spawned_from_template_service_id, status, created_at, updated_at FROM services ORDER BY created_at DESC`,
     )
     .all() as Service[];
 }
@@ -968,7 +1030,7 @@ export function listServices(): Service[] {
 export function getServiceById(id: string): Service | undefined {
   return db
     .prepare(
-      `SELECT id, agent_profile_id, channel_id, target_id, status, created_at, updated_at FROM services WHERE id = ?`,
+      `SELECT id, agent_profile_id, channel_id, target_id, creation_source, spawned_from_template_service_id, status, created_at, updated_at FROM services WHERE id = ?`,
     )
     .get(id) as Service | undefined;
 }
@@ -979,7 +1041,12 @@ export function findActiveService(
 ): (Service & { agent: AgentProfile; provider: LlmProvider }) | undefined {
   const row = db
     .prepare(
-      `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.status, s.created_at, s.updated_at FROM services s JOIN targets t ON s.target_id = t.id WHERE s.channel_id = ? AND t.target_id = ? AND s.status = 'active' LIMIT 1`,
+      `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.status, s.created_at, s.updated_at
+              , s.creation_source, s.spawned_from_template_service_id
+       FROM services s
+       JOIN targets t ON s.target_id = t.id
+       WHERE s.channel_id = ? AND t.target_id = ? AND t.target_type = 'user' AND s.status = 'active'
+       LIMIT 1`,
     )
     .get(channelId, platformUserId) as Service | undefined;
   if (!row) return undefined;
@@ -1001,6 +1068,7 @@ export function findActiveServiceByRoom(
   const row = db
     .prepare(
       `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.status, s.created_at, s.updated_at
+              , s.creation_source, s.spawned_from_template_service_id
        FROM services s
        JOIN targets t ON s.target_id = t.id
        WHERE s.channel_id = ? AND t.target_id = ? AND t.target_type = 'room' AND s.status = 'active'
@@ -1015,23 +1083,85 @@ export function findActiveServiceByRoom(
   return { ...row, agent, provider };
 }
 
-/**
- * 특정 채널에서 에이전트가 1개뿐인지 확인 (자동 세션 생성 시 사용).
- * 에이전트가 1개면 해당 에이전트 반환, 아니면 undefined.
- */
-export function findSingleAgentForChannel(
+export function findEveryoneTemplateService(
   channelId: string,
-): AgentProfile | undefined {
+): (Service & { agent: AgentProfile; provider: LlmProvider }) | undefined {
+  const row = db
+    .prepare(
+      `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.status, s.created_at, s.updated_at
+              , s.creation_source, s.spawned_from_template_service_id
+       FROM services s
+       JOIN targets t ON s.target_id = t.id
+       WHERE s.channel_id = ? AND t.target_type = 'everyone' AND s.status = 'active'
+       LIMIT 1`,
+    )
+    .get(channelId) as Service | undefined;
+  if (!row) return undefined;
+  const agent = getAgentProfileById(row.agent_profile_id);
+  if (!agent) return undefined;
+  const provider = getLlmProviderById(agent.provider_id);
+  if (!provider) return undefined;
+  return { ...row, agent, provider };
+}
+
+export function listConcreteServicesForTemplate(
+  templateServiceId: string,
+): Array<Service & { target: TargetProfile }> {
+  const template = getServiceById(templateServiceId);
+  if (!template) return [];
   const rows = db
     .prepare(
-      `SELECT DISTINCT s.agent_profile_id FROM services s WHERE s.channel_id = ? AND s.status = 'active'`,
+      `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.creation_source, s.spawned_from_template_service_id, s.status, s.created_at, s.updated_at,
+              t.id AS target_internal_id, t.target_id AS target_platform_id,
+              t.nickname AS target_nickname, t.platform AS target_platform,
+              t.target_type AS target_type, COALESCE(t.folder_name, t.target_id) AS target_folder_name,
+              t.thumbnail AS target_thumbnail,
+              t.created_at AS target_created_at, t.updated_at AS target_updated_at
+       FROM services s
+       JOIN targets t ON s.target_id = t.id
+       WHERE s.channel_id = ? AND s.agent_profile_id = ? AND s.id != ? AND s.status = 'active' AND t.target_type != 'everyone'
+       ORDER BY s.created_at ASC`,
     )
-    .all(channelId) as Array<{ agent_profile_id: string }>;
-  if (rows.length === 1) return getAgentProfileById(rows[0].agent_profile_id);
+    .all(
+      template.channel_id,
+      template.agent_profile_id,
+      templateServiceId,
+    ) as Array<
+    Service & {
+      target_internal_id: string;
+      target_platform_id: string;
+      target_nickname: string;
+      target_platform: ChannelType;
+      target_type: TargetType;
+      target_folder_name: string;
+      target_thumbnail: string | null;
+      target_created_at: string;
+      target_updated_at: string;
+    }
+  >;
 
-  // 서비스가 없으면 채널에 연결된 에이전트를 찾을 수 없지만,
-  // 기존 서비스가 하나라도 있으면 그 에이전트를 기준으로 자동 생성 가능
-  return undefined;
+  return rows.map((row) => ({
+    id: row.id,
+    agent_profile_id: row.agent_profile_id,
+    channel_id: row.channel_id,
+    target_id: row.target_id,
+    creation_source: row.creation_source,
+    spawned_from_template_service_id: row.spawned_from_template_service_id,
+    status: row.status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    target: {
+      id: row.target_internal_id,
+      target_id: row.target_platform_id,
+      nickname: row.target_nickname,
+      platform: row.target_platform,
+      target_type: row.target_type,
+      folder_name: row.target_folder_name,
+      thumbnail: row.target_thumbnail,
+      created_at: row.target_created_at,
+      updated_at: row.target_updated_at,
+    },
+  }));
 }
 
 export function getActiveServicesByChannel(
@@ -1039,7 +1169,7 @@ export function getActiveServicesByChannel(
 ): Map<string, Service> {
   const rows = db
     .prepare(
-      `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.status, s.created_at, s.updated_at, t.target_id as platform_user_id FROM services s JOIN targets t ON s.target_id = t.id WHERE s.channel_id = ? AND s.status = 'active'`,
+      `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.creation_source, s.spawned_from_template_service_id, s.status, s.created_at, s.updated_at, t.target_id as platform_user_id FROM services s JOIN targets t ON s.target_id = t.id WHERE s.channel_id = ? AND s.status = 'active'`,
     )
     .all(channelId) as Array<Service & { platform_user_id: string }>;
   const map = new Map<string, Service>();
@@ -1049,6 +1179,8 @@ export function getActiveServicesByChannel(
       agent_profile_id: row.agent_profile_id,
       channel_id: row.channel_id,
       target_id: row.target_id,
+      creation_source: row.creation_source,
+      spawned_from_template_service_id: row.spawned_from_template_service_id,
       status: row.status,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -1061,6 +1193,8 @@ export function createService(input: {
   agentProfileId: string;
   channelId: string;
   targetId: string;
+  creationSource?: Service['creation_source'];
+  spawnedFromTemplateServiceId?: string | null;
 }): void {
   const existing = db
     .prepare(`SELECT id FROM services WHERE channel_id = ? AND target_id = ?`)
@@ -1068,12 +1202,14 @@ export function createService(input: {
   if (existing) throw new Error('이 채널+타겟 조합에 이미 서비스가 존재합니다');
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO services (id, agent_profile_id, channel_id, target_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?)`,
+    `INSERT INTO services (id, agent_profile_id, channel_id, target_id, creation_source, spawned_from_template_service_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
   ).run(
     input.id,
     input.agentProfileId,
     input.channelId,
     input.targetId,
+    input.creationSource ?? 'manual',
+    input.spawnedFromTemplateServiceId ?? null,
     now,
     now,
   );

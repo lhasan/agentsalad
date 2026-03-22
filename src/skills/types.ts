@@ -6,6 +6,7 @@
  *
  * 멀티채널+멀티타겟 워크스페이스: workspacePath는 채널→타겟 서브폴더를 가리킴.
  * agentWorkspacePath는 에이전트 루트 (채널/타겟 폴더의 상위). _shared/ 접근에 사용.
+ * 최근 수정: targetName(표시용)과 targetFolderName(경로용)을 분리했다.
  */
 import type { Tool } from 'ai';
 
@@ -41,6 +42,8 @@ export interface SkillContext {
   channelId?: string;
   /** 대상 사용자 닉네임 (멀티타겟 식별) */
   targetName?: string;
+  /** 대상 워크스페이스 폴더명 (불변 경로 식별) */
+  targetFolderName?: string;
   /** 채널로 메세지 즉시 전송 (send_message 스킬 + plan executor 용) */
   sendMessage?: (text: string) => Promise<void>;
   /** 채널로 이미지 전송 (스크린샷 등) */

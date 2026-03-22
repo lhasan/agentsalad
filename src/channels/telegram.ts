@@ -5,6 +5,7 @@
  * 메시지 수신: long polling
  * 메시지 발송: sendMessage API
  * Telegram은 DM 전용 채널이므로 context.isDM=true 고정 전달.
+ * everyone 템플릿이 연결된 경우 새 발신자 DM마다 실제 user 타겟/서비스가 자동 생성된다.
  */
 import { Bot, InputFile } from 'grammy';
 

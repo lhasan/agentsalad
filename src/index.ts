@@ -2,10 +2,13 @@
  * Agent Salad — Main Orchestrator
  *
  * Agent + Channel + Target = Service 모델 기반.
+ * Target은 user/room 외에 everyone(기본 자동 생성 템플릿)도 지원한다.
  * 멀티채널: Telegram/Discord/Slack. 채널 팩토리로 타입별 분기.
  * 워크스페이스 3-depth: store/workspaces/<agent>/<channel>/<target>/.
  * Web UI: 관리 대시보드 (에이전트/채널/타겟/서비스 CRUD).
  * 서버 시작 시 folder_name 마이그레이션 + 2-depth→3-depth 워크스페이스 변환.
+ * 최근 수정: targets.folder_name을 도입해 자동 생성 타겟 워크스페이스를
+ * 닉네임이 아니라 안정적인 식별자 기반 폴더로 고정한다.
  */
 import { WEB_UI_ENABLED, WEB_UI_HOST, WEB_UI_PORT } from './config.js';
 import {
@@ -83,6 +86,7 @@ import {
 } from './cron-scheduler.js';
 import { logger } from './logger.js';
 import type { AgentProfile } from './types.js';
+import { getEveryoneTargetId } from './types.js';
 import { cleanupStalePlans } from './plan-executor.js';
 import { browserManager } from './skills/builtin/browser-manager.js';
 import { readdirSync, statSync, existsSync, renameSync, mkdirSync } from 'fs';
@@ -143,7 +147,7 @@ const pickRandom = (arr: string[]) =>
 /**
  * folder_name이 NULL인 기존 데이터에 슬러그 세팅 + 물리 폴더 리네임.
  * 서버 시작마다 실행해도 안전 (이미 세팅된 행은 스킵).
- * 에이전트, 커스텀 스킬, 채널 모두 처리.
+ * 에이전트, 채널, 타겟, 커스텀 스킬 모두 처리.
  */
 function migrateFolderNames(): void {
   const entries: Array<{ id: string; folderName: string }> = [];
@@ -202,8 +206,45 @@ function migrateFolderNames(): void {
     }
   }
 
+  // Targets
+  for (const target of listTargets()) {
+    const folderName = target.folder_name || toFolderSlug(target.nickname);
+    if (!target.folder_name) {
+      updateTarget(target.id, { folderName });
+    }
+    entries.push({ id: target.id, folderName });
+  }
+
   initFolderNames(entries);
   logger.info({ count: entries.length }, 'Folder name map initialized');
+}
+
+/**
+ * 플랫폼별 기본 everyone 타겟을 항상 보장.
+ * 사용자가 생성/삭제하는 객체가 아니라 시스템 기본 템플릿으로 노출된다.
+ */
+function ensureDefaultEveryoneTargets(): void {
+  const existing = listTargets();
+  const platforms = ['telegram', 'discord', 'slack'] as const;
+
+  for (const platform of platforms) {
+    const everyoneTargetId = getEveryoneTargetId(platform);
+    const already = existing.find(
+      (target) =>
+        target.platform === platform && target.target_type === 'everyone',
+    );
+    if (already) continue;
+
+    createTarget({
+      id: `target-${platform}-everyone`,
+      targetId: everyoneTargetId,
+      nickname: '모두에게',
+      platform,
+      targetType: 'everyone',
+      folderName: toFolderSlug(`everyone-${platform}`),
+      thumbnail: pickRandom(THUMBS_TARGET),
+    });
+  }
 }
 
 /**
@@ -230,7 +271,7 @@ function migrateWorkspaceToChannelFolders(): void {
     const mc = channelMap.get(svc.channel_id);
     if (!mc) continue;
 
-    const targetSlug = toFolderSlug(target.nickname);
+    const targetSlug = target.folder_name || toFolderSlug(target.nickname);
     const channelSlug = mc.folder_name || toFolderSlug(`${mc.type}-${mc.name}`);
 
     const oldTargetPath = join(agentWsPath, targetSlug);
@@ -268,6 +309,8 @@ function migrateWorkspaceToChannelFolders(): void {
 async function main(): Promise<void> {
   initDatabase();
   logger.info('Database initialized');
+
+  ensureDefaultEveryoneTargets();
 
   // folder_name 마이그레이션 + 인메모리 맵 초기화
   migrateFolderNames();
@@ -429,7 +472,8 @@ async function main(): Promise<void> {
       pairDiscordBot: async (channelId: string, botToken: string) => {
         try {
           const info = await verifyDiscordBot(botToken);
-          if (!info) return { success: false, error: 'Invalid Discord bot token' };
+          if (!info)
+            return { success: false, error: 'Invalid Discord bot token' };
 
           updateManagedChannel(channelId, {
             configJson: JSON.stringify({
@@ -492,14 +536,20 @@ async function main(): Promise<void> {
       listTargets: () => listTargets(),
       createTarget: (input) => {
         const id = `target-${Date.now().toString(36)}`;
+        const folderName =
+          input.targetType === 'everyone'
+            ? toFolderSlug(`everyone-${input.platform}`)
+            : toFolderSlug(input.nickname || input.targetId || id);
         createTarget({
           id,
           targetId: input.targetId,
           nickname: input.nickname,
           platform: input.platform,
           targetType: input.targetType,
+          folderName,
           thumbnail: pickRandom(THUMBS_TARGET),
         });
+        registerFolderName(id, folderName);
         return id;
       },
       updateTarget: (id, updates) => {
@@ -525,6 +575,7 @@ async function main(): Promise<void> {
           agentProfileId: input.agentProfileId,
           channelId: input.channelId,
           targetId: input.targetId,
+          creationSource: 'manual',
         });
         return id;
       },

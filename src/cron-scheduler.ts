@@ -16,6 +16,8 @@
 import { TIMEZONE } from './config.js';
 import {
   getDueServiceCrons,
+  getTargetById,
+  listConcreteServicesForTemplate,
   updateServiceCronAfterRun,
   cleanupOrphanedOnceCrons,
 } from './db.js';
@@ -75,15 +77,41 @@ async function tick(): Promise<void> {
         item.schedule_time,
       );
       const notify = item.notify === 1;
+      const target = getTargetById(item.target_id);
+      const isEveryoneTemplate = target?.target_type === 'everyone';
 
-      const ok = await processCronMessage(
-        item.service_id,
-        item.name,
-        item.prompt,
-        item.skill_hint || '[]',
-        scheduleLabel,
-        notify,
-      );
+      let ok = true;
+      if (isEveryoneTemplate) {
+        const childServices = listConcreteServicesForTemplate(item.service_id);
+        logger.info(
+          {
+            serviceId: item.service_id,
+            cronId: item.cron_id,
+            childCount: childServices.length,
+          },
+          'Cron: expanding everyone template to concrete services',
+        );
+        for (const child of childServices) {
+          const childOk = await processCronMessage(
+            child.id,
+            item.name,
+            item.prompt,
+            item.skill_hint || '[]',
+            scheduleLabel,
+            notify,
+          );
+          ok = ok && childOk;
+        }
+      } else {
+        ok = await processCronMessage(
+          item.service_id,
+          item.name,
+          item.prompt,
+          item.skill_hint || '[]',
+          scheduleLabel,
+          notify,
+        );
+      }
 
       if (ok) {
         if (item.schedule_type === 'daily') {

@@ -66,9 +66,7 @@ export function createSlackChannel(config: SlackChannelConfig): Channel {
       ? new RegExp(`<@${botUserId}>`, 'g')
       : null;
     const isMention =
-      !isDM && botMentionPattern
-        ? botMentionPattern.test(message.text)
-        : false;
+      !isDM && botMentionPattern ? botMentionPattern.test(message.text) : false;
 
     let text = message.text;
     if (isMention && botMentionPattern) {
@@ -89,7 +87,15 @@ export function createSlackChannel(config: SlackChannelConfig): Channel {
     }
 
     logger.debug(
-      { channelId, userId, userName, isDM, roomId, isMention, textLen: text.length },
+      {
+        channelId,
+        userId,
+        userName,
+        isDM,
+        roomId,
+        isMention,
+        textLen: text.length,
+      },
       'Slack message received',
     );
 

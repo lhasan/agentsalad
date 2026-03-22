@@ -20,6 +20,7 @@ The platform's fundamental unit is a **Service** — a bound triple of:
 - Agents and channels are 1:1 with services (one agent/channel per service)
 - Targets are reusable (one person can be served by multiple agent+channel combos)
 - Multiple services run concurrently in a single Node.js process
+- Services track provenance: `manual` vs `everyone_template` for Web UI public/personal filtering
 
 ---
 
@@ -192,6 +193,7 @@ store/workspaces/<agent>/
 - `_shared/` prefix in file paths routes to the agent-root shared folder
 - Path traversal is blocked via `resolveWorkspacePath()`
 - Channel folder name: `managed_channels.folder_name` (type-name slug)
+- Target folder name: `targets.folder_name` (stable key). Auto-created targets use an ID-based slug so nickname changes do not break workspace matching.
 
 ### Tool Calling Flow
 
@@ -316,6 +318,20 @@ All three channels use WebSocket/polling — **no public URL needed** for self-h
 - Socket Mode: WebSocket via App-Level Token (no public URL)
 - DM: `chat.postMessage()` to user channel
 - Requires 2 tokens: Bot User OAuth Token + App-Level Token
+- Web UI exposes `/api/integrations/slack/manifest` to prefill scopes, bot events, and Socket Mode via Slack App Manifest import
+
+## Everyone Template
+
+- `모두에게`는 실제 공유 타겟이 아니라 `에이전트 + 채널 + 모두에게` 조합으로 만드는 기본 자동 생성 템플릿이다.
+- Telegram/Discord/Slack 각 플랫폼마다 시스템 기본 타겟으로 항상 노출되며, 사용자가 수동 생성/삭제하지 않는다.
+- 새 DM 또는 room 메시지가 오면 해당 `userId` 또는 `roomId`로 실제 Target+Service가 생성된다.
+- 기존 명시적 타겟 서비스가 있으면 그 서비스가 우선 반응한다.
+- Telegram은 DM만 지원하므로 everyone 템플릿이 새 발신자별 DM 서비스를 만든다.
+- Discord/Slack은 DM과 room 모두에서 같은 템플릿 규칙을 사용한다.
+- everyone 템플릿에 붙은 크론은 템플릿 자신에게 발송되지 않고, 같은 `agent + channel` 그룹의 활성 개별 서비스들에 fan-out 실행된다.
+- 개별 타겟 서비스에는 별도의 크론을 추가로 붙일 수 있다.
+- legacy `auto_session` fallback은 폐기되었고, 퍼블릭 자동 생성은 everyone 템플릿만 사용한다.
+- Web UI는 `전체 관리 / 개인 사용` 토글로 `creation_source='everyone_template'` 서비스와 그에만 연결된 타겟/크론을 분리해서 볼 수 있다.
 
 ### Channel Interface
 

@@ -3,10 +3,12 @@
  *
  * Agent + Channel + Target = Service. 3요소 결합으로 서비스 활성화.
  * 멀티채널: Telegram, Discord, Slack 지원. ChannelType 유니온으로 확장.
- * TargetType: 'user'(DM) 또는 'room'(채널/스레드) 타겟 구분.
+ * TargetType: 'user'(DM), 'room'(채널/스레드), 'everyone'(기본 자동 생성 템플릿) 구분.
  * MessageContext: 채널 어댑터가 전달하는 메시지 수신 컨텍스트 (DM/멘션/방 정보).
  * CustomSkill: script(실행) + prompt(사용법) 묶음.
  * CronJob/ServiceCron: 서비스 단위 예약 작업 (daily/once 스케줄).
+ * 최근 수정: TargetProfile.folder_name으로 타겟 워크스페이스 경로를 안정화.
+ * 최근 수정: Service에 creation_source를 추가해 퍼블릭 생성분 필터링을 지원한다.
  */
 
 // --- Channel Type (supported messenger platforms) ---
@@ -15,7 +17,18 @@ export type ChannelType = 'telegram' | 'discord' | 'slack';
 
 // --- Target Type (user DM vs room/channel) ---
 
-export type TargetType = 'user' | 'room';
+export type TargetType = 'user' | 'room' | 'everyone';
+
+export const EVERYONE_TARGET_NICKNAME = '모두에게';
+export const EVERYONE_TARGET_PREFIX = '__everyone__';
+
+export function getEveryoneTargetId(platform: ChannelType): string {
+  return `${EVERYONE_TARGET_PREFIX}:${platform}`;
+}
+
+export function isEveryoneTargetId(targetId: string): boolean {
+  return targetId.startsWith(`${EVERYONE_TARGET_PREFIX}:`);
+}
 
 // --- Message Context (channel adapter → service router) ---
 
@@ -129,7 +142,7 @@ export interface ManagedChannel {
   pairing_status: 'pending' | 'paired' | 'error';
   /** 워크스페이스 폴더명 (이름 기반, 리네임 추적) */
   folder_name: string;
-  /** 자동 세션 생성: 1이면 미등록 유저/방의 DM/멘션 시 자동으로 Target+Service 생성 */
+  /** 레거시 호환용 필드. 현재 런타임 자동 생성은 everyone 템플릿만 사용한다. */
   auto_session: number;
   thumbnail: string | null;
   created_at: string;
@@ -143,8 +156,10 @@ export interface TargetProfile {
   target_id: string;
   nickname: string;
   platform: ChannelType;
-  /** 'user' = DM 대상, 'room' = 채널/스레드 대상 */
+  /** 'user' = DM 대상, 'room' = 채널/스레드 대상, 'everyone' = 기본 자동 생성 템플릿 */
   target_type: TargetType;
+  /** 워크스페이스 폴더명 (자동 생성 타겟은 불변 ID 기반) */
+  folder_name: string;
   thumbnail: string | null;
   created_at: string;
   updated_at: string;
@@ -157,6 +172,8 @@ export interface Service {
   agent_profile_id: string;
   channel_id: string;
   target_id: string;
+  creation_source: 'manual' | 'everyone_template';
+  spawned_from_template_service_id: string | null;
   status: 'active' | 'paused' | 'error';
   created_at: string;
   updated_at: string;

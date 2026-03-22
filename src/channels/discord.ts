@@ -73,7 +73,15 @@ export function createDiscordChannel(config: DiscordChannelConfig): Channel {
     if (!text) return;
 
     logger.debug(
-      { channelId, userId, userName, isDM, roomId, isMention, textLen: text.length },
+      {
+        channelId,
+        userId,
+        userName,
+        isDM,
+        roomId,
+        isMention,
+        textLen: text.length,
+      },
       'Discord message received',
     );
 

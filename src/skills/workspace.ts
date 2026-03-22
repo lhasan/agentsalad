@@ -8,9 +8,10 @@
  *
  * 커스텀 스킬: store/skills/<folder_name>/ — 사용자/LLM 에이전트가 직접 편집하는 스킬 폴더.
  *
- * 폴더명은 이름 기반 (한글/영문 모두 지원).
+ * 폴더명은 folder_name 기준으로 고정되고, 표시명과 분리된다.
  * 인메모리 맵(id → folder_name)으로 경로 해석.
  * 이름 변경 시 물리 폴더도 renameSync으로 추적.
+ * 최근 수정: target 워크스페이스도 nickname 대신 targets.folder_name을 우선 사용.
  */
 import {
   mkdirSync,
@@ -106,10 +107,10 @@ export function ensureWorkspace(agentId: string): string {
 export function getTargetWorkspacePath(
   agentId: string,
   channelId: string,
-  targetName: string,
+  targetFolderRef: string,
 ): string {
   const channelSlug = resolveFolderName(channelId);
-  const targetSlug = toFolderSlug(targetName);
+  const targetSlug = resolveFolderName(targetFolderRef);
   return join(getWorkspacePath(agentId), channelSlug, targetSlug);
 }
 
@@ -117,10 +118,14 @@ export function getTargetWorkspacePath(
 export function ensureTargetWorkspace(
   agentId: string,
   channelId: string,
-  targetName: string,
+  targetFolderRef: string,
 ): string {
   ensureWorkspace(agentId);
-  const targetPath = getTargetWorkspacePath(agentId, channelId, targetName);
+  const targetPath = getTargetWorkspacePath(
+    agentId,
+    channelId,
+    targetFolderRef,
+  );
   if (!existsSync(targetPath)) mkdirSync(targetPath, { recursive: true });
   const sharedPath = join(getWorkspacePath(agentId), '_shared');
   if (!existsSync(sharedPath)) mkdirSync(sharedPath, { recursive: true });

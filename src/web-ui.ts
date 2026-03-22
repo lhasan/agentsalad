@@ -8,11 +8,15 @@
  *
  * 멀티채널: Telegram/Discord/Slack 페어링 API 지원 (채널 타입별 분기).
  * WebUiContext에 pairDiscordBot, pairSlackBot 추가.
+ * 최근 수정: Slack 연동 안내를 비개발자 기준 4단계로 압축했고,
+ * everyone UI는 공용 블록 1개로 합쳐 상단에 노출한다.
+ * 퍼블릭으로 자동 생성된 항목은 왼쪽 대상/예약 리스트에서 숨김 토글로 제어한다.
  */
 import http from 'http';
 import { URL } from 'url';
 
 import { logger } from './logger.js';
+import { getSlackAppManifestJson } from './slack-manifest.js';
 import type {
   AgentProfile,
   AgentSkillToggles,
@@ -23,6 +27,7 @@ import type {
   ManagedChannel,
   Service,
   ServiceCron,
+  TargetType,
   TargetProfile,
 } from './types.js';
 
@@ -76,7 +81,7 @@ export interface WebUiContext {
     targetId: string;
     nickname: string;
     platform: ChannelType;
-    targetType?: 'user' | 'room';
+    targetType?: TargetType;
   }) => string;
   updateTarget: (
     id: string,
@@ -84,7 +89,7 @@ export interface WebUiContext {
       targetId?: string;
       nickname?: string;
       platform?: ChannelType;
-      targetType?: 'user' | 'room';
+      targetType?: TargetType;
     },
   ) => void;
   deleteTarget: (id: string) => void;
@@ -227,18 +232,37 @@ function buildDashboardHtml(): string {
   --shadow-md:0 4px 12px rgba(26,46,26,.08);
 }
 html{font-family:var(--font);background:var(--bg);color:var(--t1);font-size:16px;-webkit-font-smoothing:antialiased}
-body{max-width:1280px;margin:0 auto;padding:32px 28px 80px;position:relative}
+body{margin:0;position:relative}
 
-/* Header */
-.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
+/* App layout: sidebar + main */
+.app-layout{display:flex;min-height:100vh}
+.sidebar{width:260px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--s1);height:100vh;position:sticky;top:0}
+.sidebar-logo{padding:16px 14px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.sidebar-logo .logo{font-size:1.25rem}
+.sidebar-logo .logo-help{font-size:.82rem;color:var(--t3);text-decoration:none;padding:2px 6px;border-radius:50%;border:1px solid var(--border);line-height:1;transition:.12s}
+.sidebar-logo .logo-help:hover{background:var(--s2);color:var(--t1)}
+.sidebar-blocks{flex:1;overflow-y:auto;padding:10px 12px}
+.sidebar-blocks .block-col{margin-bottom:12px}
+.sidebar-blocks .block-col:last-child{margin-bottom:0}
+.sidebar-blocks .col-desc{display:none}
+.sidebar-blocks .col-title{font-size:.82rem}
+.sidebar-blocks .cron-blocks{flex-direction:column;gap:0;padding:0}
+.sidebar-blocks .cron-blocks .blk{flex:none;border-radius:0;padding:8px 4px;background:transparent;border:none;border-bottom:1px solid var(--s2)}
+.sidebar-blocks .cron-blocks .blk:hover{background:var(--s1);border-color:var(--s2)}
+.tab-nav-r{display:flex;gap:8px;align-items:center;margin-left:auto}
+.main-content{flex:1;min-width:0;padding:32px 28px 80px;overflow-y:auto;max-height:100vh}
+.mobile-hdr{display:none}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999}
+.sidebar-overlay.show{display:block}
+
+/* Logo & utilities */
 .logo{font-size:1.8rem;font-weight:800;letter-spacing:-.03em;display:flex;align-items:center;gap:8px}.logo b{color:var(--green)}
 .logo-icon{font-size:2rem;line-height:1}
-.logo-help{font-size:.78rem;font-weight:500;color:var(--t3);text-decoration:underline;text-underline-offset:3px;margin-left:4px;transition:color .12s}
+.logo-help{font-size:.78rem;font-weight:500;color:var(--t3);text-decoration:underline;text-underline-offset:3px;transition:color .12s}
 .logo-help:hover{color:var(--t1)}
-.hdr-r{display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:24px}
-.lang-sel{padding:5px 12px;border:1px solid var(--border);border-radius:8px;background:var(--s1);color:var(--t2);font-size:.78rem;font-weight:600;cursor:pointer;outline:none;font-family:var(--font);transition:.15s;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a9d8a'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}
+.lang-sel{padding:5px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--t2);font-size:.78rem;font-weight:600;cursor:pointer;outline:none;font-family:var(--font);transition:.15s;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a9d8a'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}
 .lang-sel:hover{border-color:var(--green);background:var(--s2);color:var(--t1)}
-.hdr-btn{padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--s1);cursor:pointer;color:var(--t2);font-size:.78rem;font-weight:600;font-family:var(--font);transition:.15s}
+.hdr-btn{padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;color:var(--t2);font-size:.78rem;font-weight:600;font-family:var(--font);transition:.15s}
 .hdr-btn:hover{background:var(--s2);color:var(--t1);border-color:var(--green)}
 .hdr-btn.danger{color:var(--red);border-color:var(--red-s)}
 .hdr-btn.danger:hover{background:var(--red-s);color:var(--red)}
@@ -281,7 +305,7 @@ body{max-width:1280px;margin:0 auto;padding:32px 28px 80px;position:relative}
 .composer{margin-bottom:32px;padding-top:24px}
 .slots{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:start;margin-bottom:12px}
 .slot{min-height:48px;border:none;border-bottom:1px solid var(--s2);display:flex;align-items:center;gap:10px;padding:8px 4px;transition:all .15s;position:relative}
-.slot.empty{border:1px dashed var(--border);border-radius:var(--r);justify-content:center;padding:14px 4px;flex-direction:column}
+.slot.empty{border:1px dashed var(--border);border-radius:var(--r);justify-content:center;padding:14px 4px;flex-direction:column;cursor:pointer}
 .slot.over{background:var(--s2)}
 .slot.drop-hint{animation:slotPulse 1.2s ease-in-out infinite;border-style:solid !important}
 .slot.drop-hint.a-slot{border-color:var(--indigo) !important;background:color-mix(in srgb,var(--indigo) 6%,transparent)}
@@ -307,7 +331,7 @@ body{max-width:1280px;margin:0 auto;padding:32px 28px 80px;position:relative}
 .slot .slot-body .slot-name{font-size:.84rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot .slot-body .slot-meta{font-size:.72rem;color:var(--t3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .composer-actions{display:flex;gap:8px;align-items:center}
-.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:8px;border:none;font-size:.85rem;font-weight:500;cursor:pointer;font-family:var(--font);transition:all .12s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:8px 16px;border-radius:8px;border:none;font-size:.85rem;font-weight:500;line-height:1.1;text-align:center;cursor:pointer;font-family:var(--font);transition:all .12s}
 .btn:active{transform:scale(.97)}
 .btn-p{background:var(--indigo);color:#fff}.btn-p:hover{background:var(--indigo-h)}
 .btn-p:disabled{opacity:.35;cursor:default;transform:none}
@@ -316,15 +340,17 @@ body{max-width:1280px;margin:0 auto;padding:32px 28px 80px;position:relative}
 .btn-sm{padding:4px 9px;font-size:.7rem}
 
 /* ======================== BLOCKS ======================== */
-.blocks{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
 .block-col{}
 .block-col .col-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .block-col .col-title{font-size:1rem;font-weight:800;letter-spacing:-.01em}
 .col-desc{font-size:.78rem;color:var(--t3);margin:-4px 0 8px;line-height:1.4}
-.block-col.ag .col-title{color:var(--indigo)}
-.block-col.ch .col-title{color:var(--green)}
-.block-col.tg .col-title{color:var(--amber)}
-.block-col.cr .col-title{color:var(--cyan)}
+.block-col .col-title{color:var(--green)}
+.block-col.hint-flash{animation:sidebarHintPulse .42s ease 3;border-radius:12px}
+@keyframes sidebarHintPulse{0%,100%{background:transparent}50%{background:color-mix(in srgb,var(--green) 18%,transparent)}}
+.col-tools{display:flex;align-items:center;gap:6px}
+.list-filter-btn{font-weight:600}
+.list-filter-btn:hover{border-color:var(--green)}
+.list-filter-btn.active{background:var(--green);border-color:var(--green);color:#fff}
 
 .blk{display:flex;align-items:center;gap:10px;padding:8px 4px;background:transparent;border:none;border-bottom:1px solid var(--s2);margin-bottom:0;cursor:grab;user-select:none;transition:all .12s;position:relative}
 .blk:last-child{border-bottom:1px solid var(--s2)}
@@ -341,7 +367,7 @@ body{max-width:1280px;margin:0 auto;padding:32px 28px 80px;position:relative}
 .blk .blk-del{position:absolute;top:6px;right:4px;background:none;border:none;color:var(--t3);cursor:pointer;font-size:.65rem;padding:2px 4px;border-radius:4px;opacity:0;transition:.12s}
 .blk:hover .blk-del{opacity:1}
 .blk-del:hover{background:var(--red-s);color:var(--red)}
-.svc-wrap{margin-bottom:6px;border-bottom:1px solid var(--s2)}
+.svc-wrap{margin-bottom:8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);overflow:hidden}
 .svc-wrap.cron-over .svc{outline:2px solid var(--cyan);outline-offset:-2px}
 .svc-crons{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px;align-items:center}
 .svc-crons-label{font-size:.65rem;font-weight:700;color:var(--cyan);letter-spacing:.02em}
@@ -366,7 +392,7 @@ body{max-width:1280px;margin:0 auto;padding:32px 28px 80px;position:relative}
 .alert-modal-icon{font-size:2rem;margin-bottom:12px}
 .alert-modal-msg{font-size:.92rem;line-height:1.6;color:var(--t1);margin-bottom:20px;white-space:pre-line}
 .alert-modal-actions{display:flex;gap:10px;justify-content:center}
-.alert-modal-actions .btn{min-width:100px;padding:10px 20px;font-size:.88rem;border-radius:8px}
+.alert-modal-actions .btn{min-width:100px;min-height:42px;padding:10px 20px;font-size:.88rem;border-radius:8px}
 
 /* Modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100}
@@ -488,9 +514,13 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 .skill-detail-empty{display:flex;align-items:center;justify-content:center;height:300px;color:var(--t3);font-size:.9rem;border:1px dashed var(--border);border-radius:var(--rl)}
 
 @media(max-width:700px){
-  .blocks{grid-template-columns:1fr}
+  .sidebar{position:fixed;left:-260px;z-index:1000;height:100vh;transition:left .2s ease}
+  .sidebar.open{left:0}
+  .sidebar-overlay.show{display:block}
+  .mobile-hdr{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:50}
+  .burger{background:none;border:1px solid var(--border);border-radius:6px;font-size:1.1rem;cursor:pointer;padding:4px 8px;color:var(--t1);font-family:var(--font)}
+  .main-content{max-height:none;padding:16px 12px 60px}
   .slots{flex-direction:column}
-  body{padding:16px 12px 60px}
   .split-layout{flex-direction:column}
   .split-list{width:100%;max-height:200px}
   .split-detail{max-height:none}
@@ -501,10 +531,68 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 </head>
 <body>
 
-<!-- HEADER -->
-<div class="hdr">
-  <div class="logo">Agent<b>Salad</b></div>
-  <div class="hdr-r">
+<div class="app-layout">
+<!-- SIDEBAR: block palette -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo">Agent<b>Salad</b></div>
+    <a class="logo-help" id="logoHelp" href="#" onclick="event.preventDefault();$('aboutModal').classList.add('show')" title="What is Agent Salad?">?</a>
+  </div>
+  <div class="sidebar-blocks">
+    <div class="block-col ag" id="agCol">
+      <div class="col-hdr">
+        <div class="col-title" id="colAgents">Agents</div>
+        <button class="btn btn-g btn-sm" onclick="openAddAgentModal()" id="btnAddAgent">+ Add</button>
+      </div>
+      <div class="col-desc" id="colAgDesc"></div>
+      <div id="agBlocks"></div>
+    </div>
+    <div class="block-col ch" id="chCol">
+      <div class="col-hdr">
+        <div class="col-title" id="colChannels">Channels</div>
+        <button class="btn btn-g btn-sm" onclick="openAddChannelModal()" id="btnAddChannel">+ Add</button>
+      </div>
+      <div class="col-desc" id="colChDesc"></div>
+      <div id="chBlocks"></div>
+    </div>
+    <div class="block-col tg" id="tgCol">
+      <div class="col-hdr">
+        <div class="col-title" id="colTargets">Targets</div>
+        <div class="col-tools">
+          <button class="btn btn-g btn-sm list-filter-btn" id="togglePublicTargetsBtn" onclick="togglePublicTargetsFilter()">Hide Public</button>
+          <button class="btn btn-g btn-sm" onclick="openAddTargetModal()" id="btnAddTarget">+ Add</button>
+        </div>
+      </div>
+      <div class="col-desc" id="colTgDesc"></div>
+      <div id="tgBlocks"></div>
+    </div>
+    <div class="block-col cr" id="crCol">
+      <div class="col-hdr">
+        <div class="col-title" id="colCrons">Schedules</div>
+        <div class="col-tools">
+          <button class="btn btn-g btn-sm list-filter-btn" id="togglePublicCronsBtn" onclick="togglePublicCronsFilter()">Hide Public</button>
+          <button class="btn btn-g btn-sm" onclick="openAddCronModal()" id="btnAddCron">+ Add</button>
+        </div>
+      </div>
+      <div id="crBlocks" class="cron-blocks"></div>
+    </div>
+  </div>
+</aside>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<!-- MAIN CONTENT -->
+<main class="main-content">
+<div class="mobile-hdr">
+  <button class="burger" onclick="toggleSidebar()">&#9776;</button>
+  <div class="logo" style="font-size:1.2rem">Agent<b>Salad</b></div>
+</div>
+
+<!-- TAB NAV -->
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="services" onclick="switchTab('services')" id="tabServices">My Salads</button>
+  <button class="tab-btn" data-tab="agents" onclick="switchTab('agents')" id="tabAgents">Agents</button>
+  <button class="tab-btn" data-tab="skills" onclick="switchTab('skills')" id="tabSkills">Skills</button>
+  <div class="tab-nav-r">
     <select class="lang-sel" id="langSelect" onchange="setLang(this.value)">
       <option value="en">EN</option>
       <option value="ko">한국어</option>
@@ -514,14 +602,6 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
     <button class="hdr-btn" id="btnApiKeys" onclick="toggleModal()">API Key Settings</button>
     <button class="hdr-btn danger" id="btnShutdown" onclick="confirmShutdown()">Shut Down Server</button>
   </div>
-</div>
-
-<!-- TAB NAV -->
-<div class="tab-nav">
-  <button class="tab-btn active" data-tab="services" onclick="switchTab('services')" id="tabServices">My Salads</button>
-  <button class="tab-btn" data-tab="agents" onclick="switchTab('agents')" id="tabAgents">Agents</button>
-  <button class="tab-btn" data-tab="skills" onclick="switchTab('skills')" id="tabSkills">Skills</button>
-  <a class="logo-help" id="logoHelp" href="#" onclick="event.preventDefault();$('aboutModal').classList.add('show')" style="margin-left:auto">What is Agent Salad?</a>
 </div>
 
 <!-- TAB: SERVICES -->
@@ -534,33 +614,21 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
   <div id="svcList"></div>
 </div>
 
-<!-- CRONS: 샐러드 바로 아래, 드래그하여 샐러드에 연결 -->
-<div class="cron-area">
-  <div class="col-hdr">
-    <div class="sec-label" style="margin-bottom:0" id="colCrons">Crons</div>
-    <button class="btn btn-g btn-sm" onclick="openAddCronModal()" id="btnAddCron">+ Add</button>
-  </div>
-  <div class="sec-desc" id="cronDesc" style="color:var(--t3);font-size:0.9em;margin:4px 0 10px 0">예약을 만들어 샐러드에 연결하면, 정해진 시간에 예약 작업을 합니다. 예약을 만들고 드래그해서 샐러드에 뿌려보세요.</div>
-  <div id="crBlocks" class="cron-blocks"></div>
-</div>
-
-<div style="text-align:center;padding:0;overflow:hidden;height:74px"><img src="/assets/fork.png" alt="" style="height:160px;margin-top:-32px"></div>
-
 <!-- COMPOSER: drag slots -->
 <div class="composer">
   <div class="sec-label" id="secCreate">샐러드 만들기</div>
   <div class="sec-desc" id="secCreateDesc" style="color:var(--t3);font-size:0.9em;margin:-4px 0 10px 0">아래 블록을 슬롯으로 드래그하세요</div>
   <div class="slots">
-    <div class="slot a-slot empty" id="slotA" data-type="agent">
+    <div class="slot a-slot empty" id="slotA" data-type="agent" onclick="hintSlotSource('agent')">
       <div class="slot-label" id="slotALabel">Agent</div>
       <div class="slot-val" id="slotAVal">Drop here</div>
     </div>
-    <div class="slot c-slot empty" id="slotC" data-type="channel">
+    <div class="slot c-slot empty" id="slotC" data-type="channel" onclick="hintSlotSource('channel')">
       <div class="slot-label" id="slotCLabel">Channel</div>
       <div class="slot-val" id="slotCVal">Drop here</div>
     </div>
     <div id="slotTContainer" data-type="target">
-      <div class="slot t-slot empty" id="slotTEmpty" data-type="target">
+      <div class="slot t-slot empty" id="slotTEmpty" data-type="target" onclick="hintSlotSource('target')">
         <div class="slot-label" id="slotTLabel">Target</div>
         <div class="slot-val">Drop here</div>
       </div>
@@ -571,35 +639,6 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
     <button class="btn btn-p" id="saveSvcBtn" disabled>Create Service</button>
     <button class="btn btn-g" id="clearSlotsBtn" data-i18n="clear">Clear</button>
   </div>
-</div>
-
-<!-- BLOCKS: agents / channels / targets side by side -->
-<div class="blocks">
-  <div class="block-col ag">
-    <div class="col-hdr">
-      <div class="col-title" id="colAgents">Agents</div>
-      <button class="btn btn-g btn-sm" onclick="openAddAgentModal()" id="btnAddAgent">+ Add</button>
-    </div>
-    <div class="col-desc" id="colAgDesc"></div>
-    <div id="agBlocks"></div>
-  </div>
-  <div class="block-col ch">
-    <div class="col-hdr">
-      <div class="col-title" id="colChannels">Channels</div>
-      <button class="btn btn-g btn-sm" onclick="openAddChannelModal()" id="btnAddChannel">+ Add</button>
-    </div>
-    <div class="col-desc" id="colChDesc"></div>
-    <div id="chBlocks"></div>
-  </div>
-  <div class="block-col tg">
-    <div class="col-hdr">
-      <div class="col-title" id="colTargets">Targets</div>
-      <button class="btn btn-g btn-sm" onclick="openAddTargetModal()" id="btnAddTarget">+ Add</button>
-    </div>
-    <div class="col-desc" id="colTgDesc"></div>
-    <div id="tgBlocks"></div>
-  </div>
-
 </div>
 
 </div><!-- /tab-services -->
@@ -639,6 +678,8 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
     </div>
   </div>
 </div><!-- /tab-skills -->
+</main>
+</div><!-- /app-layout -->
 
 <!-- About Modal -->
 <div class="modal-bg" id="aboutModal" onclick="if(event.target===this)this.classList.remove('show')">
@@ -717,7 +758,7 @@ en:{
   useCase4Title:'Teacher Managing Students',
   useCase4Desc:'A teaching assistant agent that reminds students about homework, sends quizzes, and tracks who submitted.',
   useCase4How:'<div class="uc-step"><b>1. Create an Agent</b><br>In the system prompt, type <i>"You are a classroom assistant. Send homework reminders, create quizzes, and check who has submitted."</i></div><div class="uc-step"><b>2. Turn on Skills</b><br>Enable <b>File</b> — the agent stores each student\\'s progress and submission records in files.<br>Enable <b>Schedule</b> — to automatically send homework reminders at a set time.</div><div class="uc-step"><b>3. Pick Targets</b><br>Add each student as a separate target. When making a salad, drag multiple targets into the slot — all services are created at once.</div><div class="uc-step"><b>4. Make the Salad &amp; attach a Schedule</b><br>Name: <i>"Homework check"</i>, Time: <i>16:00</i><br>Prompt: <i>"Check today\\'s homework submissions and send a reminder to anyone who hasn\\'t submitted."</i><br>Drag the schedule onto the salad — it applies to every student at once.</div><div class="uc-step"><b>✨ Tip</b><br>The agent uses a separate workspace folder for each student, so progress and records never mix between them.</div>',
-  createServiceDrag:'Make a Salad',createServiceDesc:'Drag blocks below into the slots',
+  createServiceDrag:'Make a Salad',createServiceDesc:'Drag from the left sidebar and drop into the slots',
   agents:'Agents',channels:'Channels',targets:'Targets',crons:'Schedules',
   add:'+ Add',agent:'Agent',channel:'Channel',target:'Target',
   dropHere:'Drop here',createService:'Make Salad',clear:'Clear',
@@ -779,6 +820,7 @@ en:{
   gogRestartNote:'After installing gog CLI, restart the server for changes to take effect.',
   clearApiKey:'Clear this API key?',
   setLabel:'Set',notSetLabel:'Not set',opening:'Opening...',opened:'Opened!',
+  hidePublic:'Hide Public',
   runScript:'run.sh — Execution script',schemaJson:'schema.json — Input parameters',
   promptTxt:'prompt.txt — LLM tool guide',guideMd:'GUIDE.md — Implementation guide',
   promptHint:'(Guide the LLM on when/how to use this tool)',
@@ -836,15 +878,16 @@ en:{
     +'<li>Copy the token (starts with <code>xapp-</code>)</li>'
     +'<li><i>Or: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
     +'</ol>',
-  appToken:'App-Level Token',
+  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'1. After entering the channel name, open this <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>. The app name and bot name default to <b>{defaultName}</b>.<br>2. In Slack, choose <b>Create New App</b> → <b>From an app manifest</b> and paste it. If you want a different bot identity, change the name fields there before creating the app.',
   platformSelectHint:'Select the messaging platform.',
   platformUserIdHint:'Send a message to <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> on Telegram to find your numeric user ID.',phPlatformUserId:'e.g. 123456789',
   platformUserIdHintDiscord:'Discord → Settings → Advanced → turn on <b>Developer Mode</b>. Then right-click a user → <b>Copy User ID</b> (a long number like <code>284102390284</code>).',
   platformUserIdHintSlack:'Click a user\\'s name in Slack → <b>View full profile</b> → click <b>⋮</b> (more) → <b>Copy member ID</b> (like <code>U04ABCDEF</code>).',
   nicknameHint:'A friendly name to recognize this person.',phNickname:'e.g. John',
-  targetType:'Target Type',targetTypeHint:'User = DM target, Room = channel/thread target.',
-  targetTypeUser:'User (DM)',targetTypeRoom:'Room (Channel)',
-  roomId:'Channel/Room ID',roomIdHint:'Copy the channel ID from Discord (Developer Mode) or Slack (Channel Details → bottom).',
+  targetType:'Target Type',targetTypeHint:'User = DM target, Room = channel/thread target, Everyone = default auto-create template.',
+  targetTypeUser:'User (DM)',targetTypeRoom:'Room (Channel)',targetTypeEveryone:'Everyone (Template)',everyoneTarget:'Everyone',everyoneTargetHint:'Creates a default template for this platform. When a new DM or room message arrives, Agent Salad will auto-create a real target and salad for that user/channel.',
+  everyoneCrons:'Everyone Schedules',individualCrons:'Individual Schedules',noChildServices:'No individual salads yet.',
+  roomId:'Channel/Room ID',roomIdHintDiscord:'Turn on Developer Mode in Discord Settings → right-click the channel → <b>Copy Channel ID</b>.',roomIdHintSlack:'Open channel details in Slack → scroll to the bottom → copy the <b>Channel ID</b> (like <code>C04ABCDEF</code>).',
   autoSession:'Auto Session',autoSessionHint:'Automatically create sessions when new users/rooms interact with the bot.',
   autoSessionBadge:'Auto',
   cronPromptHint:'Tell the agent what to do at the set time. e.g. "Summarize today\\'s top news"',
@@ -901,7 +944,7 @@ ko:{
   useCase4Title:'선생님의 학생 관리',
   useCase4Desc:'학생들에게 숙제를 알리고, 퀴즈를 보내고, 제출 여부를 추적하는 선생님용 보조 에이전트예요.',
   useCase4How:'<div class="uc-step"><b>1. 에이전트 만들기</b><br>시스템 프롬프트에 <i>"너는 담임 보조 에이전트야. 학생들에게 숙제 알림을 보내고, 퀴즈를 출제하고, 제출 여부를 확인해줘."</i> 라고 입력하세요.</div><div class="uc-step"><b>2. 스킬 켜기</b><br><b>파일</b>을 켜세요 — 에이전트가 학생별로 제출 기록과 진도를 파일에 저장하고 관리해요.<br><b>예약</b>을 켜세요 — 정해진 시간에 자동으로 숙제 알림을 보낼 수 있어요.</div><div class="uc-step"><b>3. 대상 선택</b><br>학생들을 각각 대상으로 추가하세요. 샐러드 만들 때 대상 슬롯에 여러 명을 드래그하면 한 번에 만들어져요.</div><div class="uc-step"><b>4. 샐러드 만들고 예약 붙이기</b><br>이름: <i>"숙제 확인"</i>, 시간: <i>16:00</i><br>프롬프트: <i>"오늘 숙제 제출 여부를 확인하고, 미제출 학생에게 알림을 보내줘."</i><br>예약을 샐러드에 드래그하면 모든 학생에게 동시에 적용돼요.</div><div class="uc-step"><b>✨ 팁</b><br>에이전트는 학생마다 별도의 워크스페이스 폴더를 사용해서 진도와 제출 기록을 자동으로 관리해요. 학생 A의 기록이 학생 B에게 섞이지 않아요.</div>',
-  createServiceDrag:'샐러드 만들기',createServiceDesc:'아래 블록을 슬롯으로 드래그하세요',
+  createServiceDrag:'샐러드 만들기',createServiceDesc:'왼쪽에서 드래그해서 슬롯에 놓으세요',
   agents:'에이전트',channels:'채널',targets:'대상',crons:'예약',
   add:'+ 추가',agent:'에이전트',channel:'채널',target:'대상',
   agentDesc:'에이전트의 제공자와 모델을 설정하세요.',
@@ -966,6 +1009,7 @@ ko:{
   gogRestartNote:'gog CLI 설치 후 서버를 재시작해야 반영됩니다.',
   clearApiKey:'이 API 키를 삭제하시겠습니까?',
   setLabel:'설정됨',notSetLabel:'미설정',opening:'열는 중...',opened:'열었습니다!',
+  hidePublic:'퍼블릭 숨김',
   runScript:'run.sh — 실행 스크립트',schemaJson:'schema.json — 입력 파라미터 정의',
   promptTxt:'prompt.txt — LLM 도구 사용 안내',guideMd:'GUIDE.md — 상세 구현 가이드',
   promptHint:'(LLM에게 이 도구를 언제/어떻게 쓸지 안내)',
@@ -1008,27 +1052,26 @@ ko:{
     +'<li>생성된 URL 복사 → 브라우저에서 열기 → 서버 선택 → Authorize (봇 초대 완료)</li>'
     +'</ol>',
   botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → 이름 입력, 워크스페이스 선택 → Create</li>'
-    +'<li>왼쪽 메뉴 → <b>OAuth &amp; Permissions</b> → <b>Bot Token Scopes</b>에 추가: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
-    +'<li>위로 스크롤 → <b>Install to Workspace</b> → Allow</li>'
-    +'<li><b>Bot User OAuth Token</b> 복사 (<code>xoxb-</code>로 시작)</li>'
-    +'<li>왼쪽 메뉴 → <b>Event Subscriptions</b> → Enable Events → 봇 이벤트 추가: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From an app manifest</b> → 아래 매니페스트 JSON을 그대로 붙여넣으세요.</li>'
+    +'<li><b>Install App</b> → <b>Install to Workspace</b>를 누르세요.</li>'
+    +'<li>설치 후 보이는 <b>Bot User OAuth Token</b> (<code>xoxb-</code>)을 여기 붙여넣으세요.</li>'
+    +'<li><b>App Home</b> → <b>Messages Tab</b>을 항상 켜세요.</li>'
     +'</ol>',
   appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
-    +'<li>왼쪽 메뉴 → <b>Socket Mode</b> → <b>Enable Socket Mode</b> 켜기</li>'
-    +'<li>다이얼로그에서 토큰 이름 입력 (예: "socket") → 스코프 <code>connections:write</code> 추가 → <b>Generate</b></li>'
-    +'<li>토큰 복사 (<code>xapp-</code>로 시작)</li>'
-    +'<li><i>또는: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'<li><b>Basic Information</b> → <b>App-Level Tokens</b> → <b>Generate Token and Scopes</b></li>'
+    +'<li>이름은 아무거나 넣고, 스코프는 <code>connections:write</code> 하나만 추가하세요.</li>'
+    +'<li>생성된 <b>App-Level Token</b> (<code>xapp-</code>)을 여기 붙여넣으세요.</li>'
     +'</ol>',
-  appToken:'앱 레벨 토큰',
+  appToken:'앱 레벨 토큰',slackManifest:'Slack 매니페스트',slackManifestDefaultName:'내 Agent Salad 봇',slackManifestHint:'1단계: 채널 이름을 먼저 적고, 이 <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>을 여세요. 앱 이름과 봇 이름은 기본적으로 <b>{defaultName}</b>으로 들어갑니다.<br>2단계: Slack에서 <b>Create New App</b> → <b>From an app manifest</b>를 누르고 붙여넣으세요. 다른 봇 이름을 쓰고 싶으면 붙여넣은 뒤 name 값을 바꾸면 됩니다.',
   platformSelectHint:'메시지를 전달할 플랫폼을 선택하세요.',
   platformUserIdHint:'Telegram에서 <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>에게 메시지를 보내면 숫자 ID를 확인할 수 있습니다.',phPlatformUserId:'예: 123456789',
   platformUserIdHintDiscord:'Discord → 설정 → 고급 → <b>개발자 모드</b> 켜기. 유저 우클릭 → <b>사용자 ID 복사</b> (<code>284102390284</code> 같은 긴 숫자).',
   platformUserIdHintSlack:'Slack에서 유저 이름 클릭 → <b>전체 프로필 보기</b> → <b>⋮</b> (더 보기) → <b>멤버 ID 복사</b> (<code>U04ABCDEF</code> 형태).',
   nicknameHint:'누구인지 알아볼 수 있는 별명을 적어주세요.',phNickname:'예: 태형이',
-  targetType:'타겟 유형',targetTypeHint:'유저 = DM 대상, 방 = 채널/스레드 대상.',
-  targetTypeUser:'유저 (DM)',targetTypeRoom:'방 (채널)',
-  roomId:'채널/방 ID',roomIdHint:'Discord에서 개발자 모드 켜고 채널 우클릭 → ID 복사, Slack에서 채널 상세 → 하단의 채널 ID.',
+  targetType:'타겟 유형',targetTypeHint:'유저 = DM 대상, 방 = 채널/스레드 대상, 모두에게 = 기본 자동 생성 템플릿.',
+  targetTypeUser:'유저 (DM)',targetTypeRoom:'방 (채널)',targetTypeEveryone:'모두에게 (템플릿)',everyoneTarget:'모두에게',everyoneTargetHint:'이 플랫폼의 기본 템플릿을 만듭니다. 새 DM이나 방 메시지가 들어오면 Agent Salad가 해당 유저/채널용 실제 대상과 샐러드를 자동 생성합니다.',
+  everyoneCrons:'모두에게 예약',individualCrons:'개별 예약',noChildServices:'아직 개별 샐러드가 없습니다.',
+  roomId:'채널/방 ID',roomIdHintDiscord:'Discord 설정에서 개발자 모드 켜기 → 채널 우클릭 → <b>채널 ID 복사</b>.',roomIdHintSlack:'Slack에서 채널 상세 열기 → 하단으로 스크롤 → <b>채널 ID</b> 복사 (<code>C04ABCDEF</code> 형태).',
   autoSession:'자동 세션',autoSessionHint:'새로운 유저나 방이 봇과 대화하면 자동으로 세션을 생성합니다.',
   autoSessionBadge:'자동',
   cronPromptHint:'예약된 시간에 에이전트가 무엇을 하길 원하는지 적어주세요. 예: "오늘의 주요 뉴스를 요약해줘"',
@@ -1082,7 +1125,7 @@ ja:{
   useCase4Title:'先生の生徒管理',
   useCase4Desc:'生徒に宿題をリマインドし、クイズを送り、提出状況を追跡する先生用のアシスタントエージェントです。',
   useCase4How:'<div class="uc-step"><b>1. エージェントを作る</b><br>システムプロンプトに<i>「あなたは担任アシスタント。生徒に宿題リマインドを送り、クイズを出題し、提出を確認して。」</i>と入力しましょう。</div><div class="uc-step"><b>2. スキルをオンにする</b><br><b>ファイル</b>をオン — 生徒ごとの進捗と提出記録をファイルに保存・管理します。<br><b>スケジュール</b>をオン — 決まった時間に自動で宿題リマインドを送れます。</div><div class="uc-step"><b>3. ターゲットを選ぶ</b><br>各生徒をそれぞれターゲットに追加しましょう。サラダ作成時にターゲットスロットに複数ドラッグすれば一括作成されます。</div><div class="uc-step"><b>4. サラダを作ってスケジュールを付ける</b><br>名前: <i>「宿題チェック」</i>、時間: <i>16:00</i><br>プロンプト: <i>「今日の宿題提出を確認して、未提出の生徒にリマインドを送って。」</i><br>スケジュールをサラダにドラッグすると、全生徒に一括適用されます。</div><div class="uc-step"><b>✨ ヒント</b><br>エージェントは生徒ごとに別のワークスペースフォルダを使うので、進捗や記録が混ざることはありません。</div>',
-  createServiceDrag:'サラダを作る',createServiceDesc:'下のブロックをスロットにドラッグ',
+  createServiceDrag:'サラダを作る',createServiceDesc:'左側からドラッグしてスロットに置いてください',
   agents:'エージェント',channels:'チャンネル',targets:'ターゲット',crons:'スケジュール',
   add:'+ 追加',agent:'エージェント',channel:'チャンネル',target:'ターゲット',
   dropHere:'ここにドロップ',createService:'サラダを作る',clear:'クリア',
@@ -1145,6 +1188,7 @@ ja:{
   gogRestartNote:'gog CLIインストール後、サーバーを再起動して反映してください。',
   clearApiKey:'このAPIキーを削除しますか？',
   setLabel:'設定済み',notSetLabel:'未設定',opening:'開いています...',opened:'開きました！',
+  hidePublic:'公開生成を隠す',
   runScript:'run.sh — 実行スクリプト',schemaJson:'schema.json — 入力パラメータ定義',
   promptTxt:'prompt.txt — LLMツールガイド',guideMd:'GUIDE.md — 実装ガイド',
   promptHint:'(LLMにこのツールの使い方を案内)',
@@ -1199,15 +1243,16 @@ ja:{
     +'<li>トークンをコピー（<code>xapp-</code>で始まる）</li>'
     +'<li><i>または: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
     +'</ol>',
-  appToken:'App-Level Token',
+  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'まずチャンネル名を入力してから、この <a href="{manifestUrl}" target="_blank" download>manifest JSON</a> を開いてください。アプリ名とボット名は既定で <b>{defaultName}</b> になります。Slack の <b>Create New App</b> → <b>From an app manifest</b> で貼り付け、別名にしたい場合は name を変更してください。',
   platformSelectHint:'メッセージを送るプラットフォームを選んでください。',
   platformUserIdHint:'Telegramで<a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>にメッセージを送ると数字IDが分かります。',phPlatformUserId:'例: 123456789',
   platformUserIdHintDiscord:'Discord → 設定 → 詳細設定 → <b>開発者モード</b>をオン。ユーザーを右クリック → <b>ユーザーIDをコピー</b>（<code>284102390284</code>のような長い数字）。',
   platformUserIdHintSlack:'Slackでユーザー名をクリック → <b>プロフィール全体を表示</b> → <b>⋮</b> → <b>メンバーIDをコピー</b>（<code>U04ABCDEF</code>形式）。',
   nicknameHint:'この人を識別できるニックネームを付けてください。',phNickname:'例: 太郎',
-  targetType:'ターゲットタイプ',targetTypeHint:'ユーザー = DM対象、ルーム = チャンネル/スレッド対象。',
-  targetTypeUser:'ユーザー (DM)',targetTypeRoom:'ルーム (チャンネル)',
-  roomId:'チャンネル/ルームID',roomIdHint:'Discordで開発者モードをオンにしてチャンネルを右クリック → IDをコピー。Slackでチャンネル詳細 → 下部のチャンネルID。',
+  targetType:'ターゲットタイプ',targetTypeHint:'ユーザー = DM対象、ルーム = チャンネル/スレッド対象、Everyone = 自動生成テンプレート。',
+  targetTypeUser:'ユーザー (DM)',targetTypeRoom:'ルーム (チャンネル)',targetTypeEveryone:'Everyone (テンプレート)',everyoneTarget:'Everyone',everyoneTargetHint:'このプラットフォームのデフォルトテンプレートを作成します。新しいDMやルームメッセージが来ると、Agent Salad がそのユーザー/チャンネル用の実ターゲットとサラダを自動生成します。',
+  everyoneCrons:'Everyone Schedules',individualCrons:'Individual Schedules',noChildServices:'個別サラダはまだありません。',
+  roomId:'チャンネル/ルームID',roomIdHintDiscord:'Discordの設定で開発者モードをオンにして、チャンネルを右クリック → <b>チャンネルIDをコピー</b>。',roomIdHintSlack:'Slackでチャンネル詳細を開く → 下部にスクロール → <b>チャンネルID</b>をコピー（<code>C04ABCDEF</code>形式）。',
   autoSession:'自動セッション',autoSessionHint:'新しいユーザーやルームがボットと会話すると自動的にセッションを作成します。',
   autoSessionBadge:'自動',
   cronPromptHint:'予定時間にエージェントに何をさせたいか書いてください。例: 「今日の主要ニュースをまとめて」',
@@ -1261,7 +1306,7 @@ zh:{
   useCase4Title:'老师管理学生',
   useCase4Desc:'帮老师提醒学生交作业、发送测验、追踪提交情况的助教代理。',
   useCase4How:'<div class="uc-step"><b>1. 创建代理</b><br>在系统提示词中输入<i>"你是班主任助手，给学生发作业提醒、出测验题、确认提交情况。"</i></div><div class="uc-step"><b>2. 开启技能</b><br>开启<b>文件</b> — 代理会为每个学生保存进度和提交记录。<br>开启<b>定时</b> — 在固定时间自动发送作业提醒。</div><div class="uc-step"><b>3. 选择目标</b><br>将每个学生分别添加为目标。制作沙拉时把多个目标拖入插槽即可一次创建。</div><div class="uc-step"><b>4. 制作沙拉并附加定时任务</b><br>名称: <i>"作业检查"</i>，时间: <i>16:00</i><br>提示词: <i>"检查今天的作业提交情况，给未提交的学生发送提醒。"</i><br>把定时任务拖到沙拉上，就会对所有学生同时生效。</div><div class="uc-step"><b>✨ 提示</b><br>代理为每个学生使用独立的工作区文件夹，进度和记录不会互相混淆。</div>',
-  createServiceDrag:'制作沙拉',createServiceDesc:'将下方块拖拽到插槽',
+  createServiceDrag:'制作沙拉',createServiceDesc:'从左侧拖拽后放到插槽里',
   agents:'代理',channels:'频道',targets:'目标',crons:'定时',
   add:'+ 添加',agent:'代理',channel:'频道',target:'目标',
   dropHere:'拖放到此',createService:'制作沙拉',clear:'清除',
@@ -1323,6 +1368,7 @@ zh:{
   gogRestartNote:'安装gog CLI后，请重启服务器以使更改生效。',
   clearApiKey:'删除此API密钥？',
   setLabel:'已设置',notSetLabel:'未设置',opening:'正在打开...',opened:'已打开！',
+  hidePublic:'隐藏公共生成',
   runScript:'run.sh — 执行脚本',schemaJson:'schema.json — 输入参数定义',
   promptTxt:'prompt.txt — LLM工具指南',guideMd:'GUIDE.md — 实现指南',
   promptHint:'(指导LLM何时/如何使用此工具)',
@@ -1377,15 +1423,16 @@ zh:{
     +'<li>复制令牌（以 <code>xapp-</code> 开头）</li>'
     +'<li><i>或: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
     +'</ol>',
-  appToken:'App-Level Token',
+  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'先输入频道名称，再打开这个 <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>。应用名和机器人名默认会使用 <b>{defaultName}</b>。在 Slack 中选择 <b>Create New App</b> → <b>From an app manifest</b> 后粘贴；如果想用别的机器人名字，粘贴后修改 name 即可。',
   platformSelectHint:'选择消息平台。',
   platformUserIdHint:'在Telegram中向<a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>发消息可查看数字ID。',phPlatformUserId:'例: 123456789',
   platformUserIdHintDiscord:'Discord → 设置 → 高级 → 开启<b>开发者模式</b>。右键用户 → <b>复制用户ID</b>（类似 <code>284102390284</code> 的长数字）。',
   platformUserIdHintSlack:'点击Slack中的用户名 → <b>查看完整资料</b> → <b>⋮</b> → <b>复制成员ID</b>（类似 <code>U04ABCDEF</code>）。',
   nicknameHint:'写一个容易辨认的昵称。',phNickname:'例: 小明',
-  targetType:'目标类型',targetTypeHint:'用户 = DM对象，房间 = 频道/线程对象。',
-  targetTypeUser:'用户 (DM)',targetTypeRoom:'房间 (频道)',
-  roomId:'频道/房间ID',roomIdHint:'在Discord中开启开发者模式后右键频道 → 复制ID。在Slack中频道详情 → 底部的频道ID。',
+  targetType:'目标类型',targetTypeHint:'用户 = DM对象，房间 = 频道/线程对象，Everyone = 默认自动创建模板。',
+  targetTypeUser:'用户 (DM)',targetTypeRoom:'房间 (频道)',targetTypeEveryone:'Everyone (模板)',everyoneTarget:'Everyone',everyoneTargetHint:'为该平台创建默认模板。收到新的 DM 或房间消息时，Agent Salad 会自动为对应用户/频道创建真实目标和沙拉。',
+  everyoneCrons:'Everyone Schedules',individualCrons:'Individual Schedules',noChildServices:'还没有单独的沙拉。',
+  roomId:'频道/房间ID',roomIdHintDiscord:'在Discord设置中开启开发者模式 → 右键频道 → <b>复制频道ID</b>。',roomIdHintSlack:'在Slack中打开频道详情 → 滚动到底部 → 复制<b>频道ID</b>（如 <code>C04ABCDEF</code>）。',
   autoSession:'自动会话',autoSessionHint:'新用户或房间与机器人交互时自动创建会话。',
   autoSessionBadge:'自动',
   cronPromptHint:'告诉代理在预定时间做什么。例: "总结今天的主要新闻"',
@@ -1450,11 +1497,12 @@ function applyLang(){
     secGoogle:'googleIntegration',secSkillsAll:'allSkills',
     modalTitle:'llmProviderKeys',saveSvcBtn:'createService',
     slotALabel:'agent',slotCLabel:'channel',slotTLabel:'target',
+    togglePublicTargetsBtn:'hidePublic',togglePublicCronsBtn:'hidePublic',
     btnNewSkillTab:'newSkill',agentDetailEmpty:'selectAgent',
     skillDetailEmpty:'selectSkill',
     btnAddCron:'add',btnAddAgent:'add',btnAddChannel:'add',btnAddTarget:'add',
     btnApiKeys:'apiKeySetup',btnShutdown:'serverShutdown',
-    logoHelp:'logoHelp',cronDesc:'cronDesc',
+    
     agentsTabLabel:'agentsTab',btnCreateAgent:'createAgent',
     aboutTitleEl:'aboutTitle',aboutCloseBtn:'close',modalCloseBtn:'close',
     ucTitle:'useCaseTitle',ucCloseBtn:'close'};
@@ -1511,6 +1559,155 @@ const api=async(p,m,b)=>{const o={method:m||'GET',headers:{}};if(b){o.headers['C
 
 let D={};
 let slots={agent:null,channel:null,targets:[]};
+const UI_EVERYONE_ID='__ui_everyone__';
+const TARGET_LIST_FILTER_KEY='agent-salad-hide-public-targets';
+const CRON_LIST_FILTER_KEY='agent-salad-hide-public-crons';
+let hidePublicTargets=localStorage.getItem(TARGET_LIST_FILTER_KEY)==='1';
+let hidePublicCrons=localStorage.getItem(CRON_LIST_FILTER_KEY)==='1';
+
+function isPublicDerivedService(svc){
+  return svc&&svc.creation_source==='everyone_template';
+}
+
+function getNonPublicServiceIdSet(){
+  return new Set((D.services||[]).filter(function(svc){
+    return !isPublicDerivedService(svc);
+  }).map(function(svc){return svc.id}));
+}
+
+function getTargetListServiceIdSet(){
+  if(!hidePublicTargets){
+    return new Set((D.services||[]).map(function(svc){return svc.id}));
+  }
+  return getNonPublicServiceIdSet();
+}
+
+function isTargetVisible(tg){
+  if(!tg||tg.target_type==='everyone')return true;
+  if(!hidePublicTargets)return true;
+  const linked=(D.services||[]).filter(function(svc){return svc.target_id===tg.id});
+  if(!linked.length)return true;
+  return linked.some(function(svc){return !isPublicDerivedService(svc)});
+}
+
+function getVisibleTargetServiceCount(targetId){
+  const visibleIds=getTargetListServiceIdSet();
+  return (D.services||[]).filter(function(svc){
+    return svc.target_id===targetId&&visibleIds.has(svc.id);
+  }).length;
+}
+
+function isCronVisible(cronId){
+  if(!hidePublicCrons)return true;
+  const links=(D.serviceCrons||[]).filter(function(sc){return sc.cron_id===cronId});
+  if(!links.length)return true;
+  const visibleIds=getNonPublicServiceIdSet();
+  return links.some(function(sc){return visibleIds.has(sc.service_id)});
+}
+
+function getVisibleCronLinkedCount(cronId){
+  const visibleIds=hidePublicCrons
+    ? getNonPublicServiceIdSet()
+    : new Set((D.services||[]).map(function(svc){return svc.id}));
+  return (D.serviceCrons||[]).filter(function(sc){
+    return sc.cron_id===cronId&&visibleIds.has(sc.service_id);
+  }).length;
+}
+
+function applySidebarFilterUI(){
+  const tgBtn=$('togglePublicTargetsBtn');
+  const crBtn=$('togglePublicCronsBtn');
+  if(tgBtn)tgBtn.classList.toggle('active',hidePublicTargets);
+  if(crBtn)crBtn.classList.toggle('active',hidePublicCrons);
+}
+
+function togglePublicTargetsFilter(){
+  hidePublicTargets=!hidePublicTargets;
+  localStorage.setItem(TARGET_LIST_FILTER_KEY,hidePublicTargets?'1':'0');
+  renderBlocks();
+  applySidebarFilterUI();
+}
+
+function togglePublicCronsFilter(){
+  hidePublicCrons=!hidePublicCrons;
+  localStorage.setItem(CRON_LIST_FILTER_KEY,hidePublicCrons?'1':'0');
+  renderBlocks();
+  applySidebarFilterUI();
+}
+
+function updateSlackManifestLink(){
+  var row=$('mChSlackManifestRow');
+  if(!row)return;
+  var nameInput=$('mChName');
+  var rawName=nameInput&&nameInput.value?nameInput.value.trim():'';
+  var manifestUrl='/api/integrations/slack/manifest';
+  if(rawName){
+    var params=new URLSearchParams({appName:rawName,botName:rawName});
+    manifestUrl+='?'+params.toString();
+  }
+  row.innerHTML=
+    '<label>'+t('slackManifest')+'</label>'+
+    '<div class="field-hint">'+
+      t('slackManifestHint')
+        .replace('{manifestUrl}',manifestUrl)
+        .replace('{defaultName}',esc(rawName||t('slackManifestDefaultName')))+
+    '</div>';
+}
+
+function hintSlotSource(type){
+  const slotMap={agent:'slotA',channel:'slotC',target:'slotTEmpty'};
+  const colMap={agent:'agCol',channel:'chCol',target:'tgCol'};
+  const slotEl=$(slotMap[type]);
+  const colEl=$(colMap[type]);
+  if(!slotEl||!slotEl.classList.contains('empty')) return;
+  slotEl.classList.add('drop-hint');
+  setTimeout(()=>slotEl.classList.remove('drop-hint'),1800);
+  if(window.innerWidth<=900){
+    const sb=$('sidebar'),ov=$('sidebarOverlay');
+    if(sb&&!sb.classList.contains('open')) sb.classList.add('open');
+    if(ov&&!ov.classList.contains('show')) ov.classList.add('show');
+  }
+  if(colEl){
+    colEl.scrollIntoView({behavior:'smooth',block:'center'});
+    colEl.classList.add('hint-flash');
+    setTimeout(()=>colEl.classList.remove('hint-flash'),1350);
+  }
+}
+
+function getEveryoneTargetForPlatform(platform){
+  return (D.targets||[]).find(function(tg){
+    return tg.target_type==='everyone'&&tg.platform===platform;
+  })||null;
+}
+
+function isUnifiedEveryoneTargetId(targetId){
+  return targetId===UI_EVERYONE_ID;
+}
+
+function resolveUnifiedEveryoneTarget(platform){
+  if(!platform)return null;
+  return getEveryoneTargetForPlatform(platform);
+}
+
+function resolveTargetIdForPlatform(targetId,platform){
+  if(!isUnifiedEveryoneTargetId(targetId))return targetId;
+  var tg=resolveUnifiedEveryoneTarget(platform);
+  return tg?tg.id:'';
+}
+
+function openUnifiedEveryoneDetail(){
+  var panel=$('detailPanel');
+  panel.innerHTML=
+    '<div class="d-hdr"><h3>'+t('everyoneTarget')+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
+    '<span class="d-tag tg">'+t('target')+'</span>'+
+    '<div class="d-field"><label>'+t('targetType')+'</label><div class="d-val">'+t('targetTypeEveryone')+'</div></div>'+
+    '<div class="d-field"><label>'+t('platform')+'</label><div class="d-val">Telegram / Discord / Slack</div></div>'+
+    '<div class="d-field"><label>'+t('target')+'</label><div class="d-val">'+esc(t('everyoneTargetHint'))+'</div></div>'+
+    '<div class="d-actions">'+
+      '<button class="btn btn-g" onclick="closeDetail()">'+t('close')+'</button>'+
+    '</div>';
+  $('detailBg').classList.add('show');
+}
 
 /* ---- SCROLL + FLASH ---- */
 function scrollToComposer(){
@@ -1562,7 +1759,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(slots.channel&&slots.channel.platform&&dragData.platform&&slots.channel.platform!==dragData.platform){
       showAlert(t('typeMismatch'),'⚠️');return;
     }
-    addTarget(dragData.id,dragData.name,dragData.thumb,dragData.meta);
+    addTarget(dragData.id,dragData.name,dragData.thumb,dragData.meta,dragData.platform);
   });
 });
 
@@ -1584,6 +1781,7 @@ function fillSlot(type,id,name,thumb,meta,platform){
     // 채널 교체 시 플랫폼 불일치 타겟 제거
     if(platform&&slots.targets.length>0){
       slots.targets=slots.targets.filter(function(tg){
+        if(isUnifiedEveryoneTargetId(tg.id))return true;
         var tgObj=D.targets.find(function(x){return x.id===tg.id});
         return !tgObj||tgObj.platform===platform;
       });
@@ -1594,9 +1792,9 @@ function fillSlot(type,id,name,thumb,meta,platform){
   checkSaveBtn();
 }
 
-function addTarget(id,name,thumb,meta){
+function addTarget(id,name,thumb,meta,platform){
   if(slots.targets.find(t=>t.id===id))return;
-  slots.targets.push({id,name,thumb,meta});
+  slots.targets.push({id,name,thumb,meta,platform:platform||''});
   renderTargetSlot();
   checkSaveBtn();
 }
@@ -1616,11 +1814,12 @@ function renderTargetSlot(){
   emptyEl.style.display='none';
   listEl.innerHTML=slots.targets.map(tg=>{
     const avatar=tg.thumb||(tg.name||'?').charAt(0).toUpperCase();
+    const meta=tg.meta||(isUnifiedEveryoneTargetId(tg.id)?'Telegram / Discord / Slack':'');
     return '<div class="slot t-slot filled" style="border:none;border-bottom:1px solid var(--s2);flex-direction:row;justify-content:flex-start;padding:8px 4px">'+
       '<div class="slot-avatar">'+avatar+'</div>'+
       '<div class="slot-body">'+
         '<div class="slot-name">'+esc(tg.name)+'</div>'+
-        (tg.meta?'<div class="slot-meta">'+esc(tg.meta)+'</div>':'')+
+        (meta?'<div class="slot-meta">'+esc(meta)+'</div>':'')+
       '</div>'+
       '<button class="slot-clear" style="opacity:1" onclick="removeTarget(\\''+tg.id+'\\')">\\u2715</button>'+
     '</div>';
@@ -1661,6 +1860,10 @@ function filterTargetsByPlatform(){
   var chPlat=slots.channel&&slots.channel.platform?slots.channel.platform:'';
   document.querySelectorAll('#tgBlocks .blk.tg').forEach(function(el){
     var tPlat=el.getAttribute('data-platform')||'';
+    if(el.getAttribute('data-everyone-unified')==='1'){
+      el.style.opacity='';el.style.pointerEvents='';el.setAttribute('draggable','true');
+      return;
+    }
     if(chPlat&&tPlat&&chPlat!==tPlat){
       el.style.opacity='0.35';el.style.pointerEvents='none';el.setAttribute('draggable','false');
     }else{
@@ -1674,7 +1877,11 @@ function checkSaveBtn(){$('saveSvcBtn').disabled=!(slots.agent&&slots.channel&&s
 $('saveSvcBtn').onclick=async()=>{
   if(!slots.agent||!slots.channel||!slots.targets.length)return;
   for(const tg of slots.targets){
-    const res=await api('/api/services','POST',{agentProfileId:slots.agent.id,channelId:slots.channel.id,targetId:tg.id});
+    const resolvedTargetId=resolveTargetIdForPlatform(tg.id,slots.channel.platform);
+    if(!resolvedTargetId){showAlert(t('typeMismatch'),'❌');return}
+    const already=D.services.find(s=>s.agent_profile_id===slots.agent.id&&s.channel_id===slots.channel.id&&s.target_id===resolvedTargetId);
+    if(already)continue;
+    const res=await api('/api/services','POST',{agentProfileId:slots.agent.id,channelId:slots.channel.id,targetId:resolvedTargetId});
     if(res.error){showAlert(res.error,'❌');return}
   }
   clearAllSlots();load();
@@ -1769,6 +1976,9 @@ function updateChTypeFields(){
   $('mChTokenHint').innerHTML=chTypeHintFor(type);
   var slackRow=$('mChAppTokenRow');
   if(slackRow)slackRow.style.display=type==='slack'?'':'none';
+  var slackManifestRow=$('mChSlackManifestRow');
+  if(slackManifestRow)slackManifestRow.style.display=type==='slack'?'':'none';
+  updateSlackManifestLink();
   var ph=type==='discord'?'MTA5...':'123456:ABC-DEF...';
   $('mChToken').placeholder=ph;
 }
@@ -1778,7 +1988,8 @@ function openAddChannelModal(){
     '<div class="d-hdr"><h3>'+t('channel')+' '+t('create')+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
     '<div class="d-field"><label>'+t('platform')+'</label><div class="field-hint">'+t('channelTypeHint')+'</div>'+
       '<select id="mChType" onchange="updateChTypeFields()"><option value="telegram">Telegram</option><option value="discord">Discord</option><option value="slack">Slack</option></select></div>'+
-    '<div class="d-field"><label>'+t('name')+'</label><div class="field-hint">'+t('channelNameHint')+'</div><input id="mChName" placeholder="'+t('phChannelName')+'"></div>'+
+    '<div class="d-field"><label>'+t('name')+'</label><div class="field-hint">'+t('channelNameHint')+'</div><input id="mChName" oninput="updateSlackManifestLink()" placeholder="'+t('phChannelName')+'"></div>'+
+    '<div class="d-field" id="mChSlackManifestRow" style="display:none"></div>'+
     '<div class="d-field"><label>'+t('botToken')+'</label><div class="field-hint" id="mChTokenHint">'+t('botTokenHint')+'</div><input id="mChToken" placeholder="123456:ABC-DEF..." style="font-family:var(--mono);font-size:.72rem"></div>'+
     '<div class="d-field" id="mChAppTokenRow" style="display:none"><label>'+t('appToken')+'</label><div class="field-hint">'+t('appTokenHint')+'</div><input id="mChAppToken" placeholder="xapp-1-..." style="font-family:var(--mono);font-size:.72rem"></div>'+
     '<div class="d-actions">'+
@@ -1786,6 +1997,7 @@ function openAddChannelModal(){
       '<button class="btn btn-g" onclick="closeDetail()">'+t('cancel')+'</button>'+
     '</div>';
   $('detailBg').classList.add('show');
+  updateSlackManifestLink();
 }
 async function submitAddChannel(){
   var type=$('mChType').value;
@@ -1815,12 +2027,23 @@ function updateTgPlatFields(){
   var plat=$('mTgPlat').value;
   var typeEl=$('mTgType');
   var tt=typeEl?typeEl.value:'user';
-  if(tt==='room'){
-    $('mTgIdHint').innerHTML=t('roomIdHint');
+  var idInput=$('mTgId');
+  var nickInput=$('mTgNick');
+  if(tt==='everyone'){
+    $('mTgIdHint').innerHTML=t('everyoneTargetHint');
+    var lbl0=$('mTgIdLabel');if(lbl0)lbl0.textContent=t('target');
+    if(idInput){idInput.value='__everyone__:'+plat;idInput.disabled=true}
+    if(nickInput){nickInput.value=t('everyoneTarget');nickInput.disabled=true}
+  }else if(tt==='room'){
+    $('mTgIdHint').innerHTML=plat==='slack'?t('roomIdHintSlack'):t('roomIdHintDiscord');
     var lbl=$('mTgIdLabel');if(lbl)lbl.textContent=t('roomId');
+    if(idInput)idInput.disabled=false;
+    if(nickInput)nickInput.disabled=false;
   }else{
     $('mTgIdHint').innerHTML=tgPlatHintFor(plat);
     var lbl2=$('mTgIdLabel');if(lbl2)lbl2.textContent=t('platformUserId');
+    if(idInput)idInput.disabled=false;
+    if(nickInput)nickInput.disabled=false;
   }
   // Telegram은 room 타입 불가
   if(typeEl){
@@ -1846,7 +2069,8 @@ function openAddTargetModal(){
 async function submitAddTarget(){
   const tid=$('mTgId').value.trim(),nick=$('mTgNick').value.trim(),plat=$('mTgPlat').value,tt=$('mTgType').value;
   if(!tid||!nick)return;
-  const res=await api('/api/targets','POST',{targetId:tid,nickname:nick,platform:plat,targetType:tt});
+  const payload={targetId:tid,nickname:nick,platform:plat,targetType:tt};
+  const res=await api('/api/targets','POST',payload);
   if(res&&res.error){showAlert(res.error);return}
   closeDetail();load();
 }
@@ -1966,7 +2190,7 @@ async function saveAgentDetail(id){
 function openChannelDetail(id){
   const ch=D.managedChannels.find(c=>c.id===id);if(!ch)return;
   const paired=ch.pairing_status==='paired';
-  const showAutoSession=(ch.type==='discord'||ch.type==='slack');
+  const showAutoSession=false;
   let configDisplay='';
   try{const cfg=JSON.parse(ch.config_json||'{}');if(cfg.botUsername)configDisplay='@'+cfg.botUsername;else if(cfg.botName)configDisplay=cfg.botName+(cfg.teamName?' ('+cfg.teamName+')':'');else if(cfg.botToken)configDisplay=cfg.botToken.slice(0,8)+'...'}catch{}
   const panel=$('detailPanel');
@@ -1998,19 +2222,20 @@ function openTargetDetail(id){
   const tg=D.targets.find(t=>t.id===id);if(!tg)return;
   const svcCount=D.services.filter(s=>s.target_id===tg.id).length;
   const tt=tg.target_type||'user';
+  const isEveryone=tt==='everyone';
   const panel=$('detailPanel');
   panel.innerHTML=
     '<div class="d-hdr"><h3>'+esc(tg.nickname)+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
     '<span class="d-tag tg">'+t('target')+'</span>'+
-    '<div class="d-field"><label>'+t('platform')+'</label><select id="dTgPlat"><option value="telegram"'+(tg.platform==='telegram'?' selected':'')+'>Telegram</option><option value="discord"'+(tg.platform==='discord'?' selected':'')+'>Discord</option><option value="slack"'+(tg.platform==='slack'?' selected':'')+'>Slack</option></select></div>'+
-    '<div class="d-field"><label>'+t('targetType')+'</label><div class="d-val">'+(tt==='room'?t('targetTypeRoom'):t('targetTypeUser'))+'</div></div>'+
-    '<div class="d-field"><label>'+t('nickname')+'</label><input id="dTgNick" value="'+esc(tg.nickname).replace(/"/g,'&quot;')+'"></div>'+
-    '<div class="d-field"><label>'+(tt==='room'?t('roomId'):t('platformUserId'))+'</label><input id="dTgId" value="'+esc(tg.target_id).replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="d-field"><label>'+t('platform')+'</label>'+(isEveryone?'<div class="d-val">'+esc(tg.platform)+'</div>':'<select id="dTgPlat"><option value="telegram"'+(tg.platform==='telegram'?' selected':'')+'>Telegram</option><option value="discord"'+(tg.platform==='discord'?' selected':'')+'>Discord</option><option value="slack"'+(tg.platform==='slack'?' selected':'')+'>Slack</option></select>')+'</div>'+
+    '<div class="d-field"><label>'+t('targetType')+'</label><div class="d-val">'+(tt==='room'?t('targetTypeRoom'):(tt==='everyone'?t('targetTypeEveryone'):t('targetTypeUser')))+'</div></div>'+
+    '<div class="d-field"><label>'+t('nickname')+'</label>'+(isEveryone?'<div class="d-val">'+esc(tg.nickname)+'</div>':'<input id="dTgNick" value="'+esc(tg.nickname).replace(/"/g,'&quot;')+'">')+'</div>'+
+    '<div class="d-field"><label>'+((tt==='room')?t('roomId'):((tt==='everyone')?t('target'):t('platformUserId')))+'</label>'+(isEveryone?'<div class="d-val">'+esc(tg.target_id)+'</div>':'<input id="dTgId" value="'+esc(tg.target_id).replace(/"/g,'&quot;')+'">')+'</div>'+
     (svcCount?'<div class="d-field"><label>Active Services</label><div class="d-val">'+svcCount+' service'+(svcCount>1?'s':'')+'</div></div>':'')+
     '<div class="d-actions">'+
-      '<button class="btn btn-p" onclick="saveTargetDetail(\\''+tg.id+'\\')">'+t('save')+'</button>'+
+      (isEveryone?'':'<button class="btn btn-p" onclick="saveTargetDetail(\\''+tg.id+'\\')">'+t('save')+'</button>')+
       '<button class="btn btn-g" onclick="closeDetail()">'+t('cancel')+'</button>'+
-      (svcCount?'':'<button class="btn btn-d" style="margin-left:auto" onclick="delTg(\\''+tg.id+'\\');closeDetail()">'+t('delete')+'</button>')+
+      ((svcCount||isEveryone)?'':'<button class="btn btn-d" style="margin-left:auto" onclick="delTg(\\''+tg.id+'\\');closeDetail()">'+t('delete')+'</button>')+
     '</div>'+
     '';
   $('detailBg').classList.add('show');
@@ -2035,11 +2260,10 @@ async function clearPk(pid){if(!await showConfirm(t('clearApiKey'),'🔑'))retur
 async function load(){
   _cachedAllSkills=null;
   D=await api('/api/overview');
-
-
   renderServices();
   renderBlocks();
   renderProviders();
+  applySidebarFilterUI();
   applyLang();
 }
 
@@ -2065,6 +2289,17 @@ function renderServices(){
     if(ch&&getChannelWarning(ch))warns.push(getChannelWarning(ch));
     const agName=ag?.name||'?';
     const chName=ch?.name||'?';
+    const getTargetByService=function(svc){return D.targets.find(t=>t.id===svc.target_id)};
+    const templateSvc=svcs.find(s=>{const tg=getTargetByService(s);return tg&&tg.target_type==='everyone'});
+    const concreteSvcs=svcs.filter(s=>{const tg=getTargetByService(s);return !tg||tg.target_type!=='everyone'});
+    const renderSvcCronPills=function(serviceId){
+      const entries=(D.serviceCrons||[]).filter(sc=>sc.service_id===serviceId);
+      if(!entries.length)return '<span style="color:var(--t3);font-size:.68rem">'+esc(t('noCrons'))+'</span>';
+      return entries.map(sc=>{
+        const cj=(D.cronJobs||[]).find(c=>c.id===sc.cron_id);
+        return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid var(--border);border-radius:999px;font-size:.68rem;background:var(--bg)">'+esc(cj?.name||'?')+'</span>';
+      }).join('');
+    };
 
     // 그룹 내 모든 서비스의 크론 합산 (중복 cron_id 제거)
     const allCronIds=new Set();
@@ -2089,6 +2324,43 @@ function renderServices(){
     // 그룹 드롭 타겟: 첫 번째 서비스 ID를 대표로 (onSvcDrop에서 그룹 전체 처리)
     const groupSvcIds=svcs.map(s=>s.id);
     const dropAttr='ondragover="onSvcDragOver(event)" ondragleave="onSvcDragLeave(event)" ondrop="onGroupDrop(event,'+JSON.stringify(groupSvcIds).replace(/"/g,'&quot;')+')"';
+
+    if(templateSvc){
+      const templateCronEntries=(D.serviceCrons||[]).filter(sc=>sc.service_id===templateSvc.id);
+      const templateCronCards=templateCronEntries.map(sc=>{
+        const cj=(D.cronJobs||[]).find(c=>c.id===sc.cron_id);
+        const schedLabel=cj?(cj.schedule_type==='daily'?'\\u23F0 '+cj.schedule_time:'\\u2B50 '+cj.schedule_time.slice(0,16).replace('T',' ')):'';
+        return '<div class="cron-card" onclick="openCronDetail(\\''+sc.cron_id+'\\')">'+
+          '<span class="cc-name">'+esc(cj?.name||'?')+'</span>'+
+          '<span class="cc-schedule">'+schedLabel+'</span>'+
+          '<button class="cc-detach" onclick="event.stopPropagation();detachCronFromGroup(\\''+key.replace(/'/g,"\\\\&#39;")+'\\',\\''+sc.cron_id+'\\')">\\u2715</button>'+
+          '</div>';
+      }).join('');
+      const allActive=svcs.every(s=>s.status==='active');
+      const anyActive=svcs.some(s=>s.status==='active');
+      const toggleAction=anyActive?'paused':'active';
+      const toggleLabel=anyActive?t('pause'):t('resume');
+      const childCards=concreteSvcs.map(s=>{
+        const tg=getTargetByService(s);
+        return '<div class="tg-card'+(s.status==='paused'?' paused':'')+'">'+
+          '<span class="tg-name">'+esc(tg?.nickname||'?')+'</span>'+
+          '<div style="margin-top:6px;font-size:.68rem;color:var(--t3)">'+esc(t('individualCrons'))+'</div>'+
+          '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">'+renderSvcCronPills(s.id)+'</div>'+
+          '<button class="tg-del" onclick="event.stopPropagation();removeFromGroup(\\''+s.id+'\\')">\\u2715</button>'+
+          '</div>';
+      }).join('')||'<div style="padding:8px 14px;color:var(--t3);font-size:.78rem">'+esc(t('noChildServices'))+'</div>';
+      return '<div class="svc-wrap" '+dropAttr+'>'+
+        '<div class="svc">'+
+        '<div class="svc-icon'+(allActive?' spinning':'')+'">'+(allActive?'🥗':'🍽️')+'</div>'+
+        '<div class="svc-body"><div class="svc-title">'+svcDescHtml(agName,chName,t('everyoneTarget'))+(warns.length?' <span style="color:var(--red);font-size:.7rem">\\u26A0</span>':'')+'</div></div>'+
+        '<div class="svc-status">'+
+        '<button class="btn btn-g btn-sm svc-toggle" onclick="toggleGroupSvc('+JSON.stringify(groupSvcIds).replace(/"/g,'&quot;')+',\\''+toggleAction+'\\')">'+toggleLabel+'</button>'+
+        '<button class="btn-d btn-sm" onclick="delSvc(\\''+templateSvc.id+'\\')">'+t('del')+'</button>'+
+        '</div></div>'+
+        '<div class="svc-targets-row"><span class="svc-targets-label">'+t('target')+'</span>'+childCards+'</div>'+
+        '<div class="svc-crons"><span class="svc-crons-label">'+t('everyoneCrons')+'</span>'+(templateCronCards||'<span style="color:var(--t3);font-size:.68rem">'+esc(t('noCrons'))+'</span>')+'</div>'+
+        '</div>';
+    }
 
     if(svcs.length===1){
       const s=svcs[0];
@@ -2155,8 +2427,7 @@ function getChannelWarning(ch){
 function renderBlocks(){
   const agentSvcCount={};
   const channelSvcCount={};
-  D.services.forEach(s=>{agentSvcCount[s.agent_profile_id]=(agentSvcCount[s.agent_profile_id]||0)+1;channelSvcCount[s.channel_id]=(channelSvcCount[s.channel_id]||0)+1});
-  const usedTargets=new Set(D.services.map(s=>s.target_id));
+  (D.services||[]).forEach(s=>{agentSvcCount[s.agent_profile_id]=(agentSvcCount[s.agent_profile_id]||0)+1;channelSvcCount[s.channel_id]=(channelSvcCount[s.channel_id]||0)+1});
 
   // Agents — 항상 드래그 가능 (멀티타겟: 같은 에이전트를 여러 서비스에 재사용)
   $('agBlocks').innerHTML=D.agentProfiles.map(p=>{
@@ -2199,31 +2470,48 @@ function renderBlocks(){
   }).join('')||'<div style="color:var(--t3);font-size:.82rem;padding:8px">'+esc(t('noChannels'))+'</div>';
 
   // Targets
-  var platBadgeColors={telegram:'#0088cc',discord:'#5865F2',slack:'#4A154B'};
-  $('tgBlocks').innerHTML=D.targets.map(t=>{
-    const svcCount=D.services.filter(s=>s.target_id===t.id).length;
-    const platLabel={telegram:'Telegram',discord:'Discord',slack:'Slack'}[t.platform]||t.platform;
-    const platColor=platBadgeColors[t.platform]||'var(--t3)';
-    const isRoom=t.target_type==='room';
-    const avatar = t.thumbnail || (isRoom?'#':(t.nickname||'T').charAt(0).toUpperCase());
-    const displayName = isRoom?'#'+t.nickname:t.nickname;
-    const platBadge='<span style="font-size:.62rem;font-weight:700;background:'+platColor+';color:#fff;border-radius:3px;padding:1px 4px;margin-right:3px;vertical-align:1px">'+platLabel+'</span>';
-    const typeTag = isRoom?'<span style="font-size:.62rem;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;vertical-align:1px">ROOM</span>':'';
-    const meta = t.target_id;
-    return '<div class="blk tg" draggable="true" data-platform="'+t.platform+'" ondragstart="dragMoved=false;onDragStart(event,\\'target\\',\\''+t.id+'\\',\\''+esc(t.nickname).replace(/'/g,"\\\\&#39;")+'\\',\\''+avatar.replace(/'/g,"\\\\&#39;")+'\\',\\''+esc(platLabel+' '+meta).replace(/'/g,"\\\\&#39;")+'\\',\\''+t.platform+'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
-      ' onclick="if(!dragMoved){event.stopPropagation();openTargetDetail(\\''+t.id+'\\')}" style="cursor:pointer">'+
+  const unifiedEveryoneBlock=(function(){
+    const everyoneTargets=(D.targets||[]).filter(function(tg){return tg.target_type==='everyone'});
+    if(!everyoneTargets.length)return '';
+    const totalSvcCount=(D.services||[]).filter(function(s){
+      return everyoneTargets.some(function(tg){return tg.id===s.target_id});
+    }).length;
+    const avatar=everyoneTargets[0].thumbnail||'*';
+    const meta='Telegram / Discord / Slack TEMPLATE';
+    return '<div class="blk tg" draggable="true" data-everyone-unified="1" '+
+      'ondragstart="dragMoved=false;onDragStart(event,\\'target\\',\\''+UI_EVERYONE_ID+'\\',\\''+esc(t('everyoneTarget')).replace(/'/g,"\\\\&#39;")+'\\',\\''+avatar.replace(/'/g,"\\\\&#39;")+'\\',\\''+esc(meta).replace(/'/g,"\\\\&#39;")+'\\',\\'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
+      ' onclick="if(!dragMoved){event.stopPropagation();openUnifiedEveryoneDetail()}" style="cursor:pointer">'+
       '<div class="blk-avatar">'+avatar+'</div>'+
       '<div class="blk-body">'+
-      '<div class="blk-name">'+platBadge+typeTag+esc(displayName)+(svcCount?' <span class="in-use">\u00d7'+svcCount+'</span>':'')+'</div>'+
+      '<div class="blk-name">'+esc(t('everyoneTarget'))+(totalSvcCount?' <span class="in-use">\\u00d7'+totalSvcCount+'</span>':'')+'</div>'+
       '<div class="blk-meta">'+esc(meta)+'</div>'+
       '</div>'+
-      (svcCount?'':'<button class="blk-del" onclick="event.stopPropagation();delTg(\\''+t.id+'\\')">\\u2715</button>')+
+      '</div>';
+  })();
+  const targetBlocks=D.targets.filter(function(tg){
+    return tg.target_type!=='everyone'&&isTargetVisible(tg);
+  }).map(tg=>{
+    const svcCount=getVisibleTargetServiceCount(tg.id);
+    const platLabel={telegram:'Telegram',discord:'Discord',slack:'Slack'}[tg.platform]||tg.platform;
+    const isRoom=tg.target_type==='room';
+    const avatar = tg.thumbnail || (isRoom?'#':(tg.nickname||'T').charAt(0).toUpperCase());
+    const displayName = isRoom?'#'+tg.nickname:tg.nickname;
+    const meta = platLabel+(isRoom?' ROOM':'')+' '+tg.target_id;
+    return '<div class="blk tg" draggable="true" data-platform="'+tg.platform+'" ondragstart="dragMoved=false;onDragStart(event,\\'target\\',\\''+tg.id+'\\',\\''+esc(tg.nickname).replace(/'/g,"\\\\&#39;")+'\\',\\''+avatar.replace(/'/g,"\\\\&#39;")+'\\',\\''+esc(meta).replace(/'/g,"\\\\&#39;")+'\\',\\''+tg.platform+'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
+      ' onclick="if(!dragMoved){event.stopPropagation();openTargetDetail(\\''+tg.id+'\\')}" style="cursor:pointer">'+
+      '<div class="blk-avatar">'+avatar+'</div>'+
+      '<div class="blk-body">'+
+      '<div class="blk-name">'+esc(displayName)+(svcCount?' <span class="in-use">\u00d7'+svcCount+'</span>':'')+'</div>'+
+      '<div class="blk-meta">'+esc(meta)+'</div>'+
+      '</div>'+
+      (svcCount?'':'<button class="blk-del" onclick="event.stopPropagation();delTg(\\''+tg.id+'\\')">\\u2715</button>')+
       '</div>'
-  }).join('')||'<div style="color:var(--t3);font-size:.82rem;padding:8px">'+esc(t('noTargets'))+'</div>';
+  }).join('');
+  $('tgBlocks').innerHTML=(unifiedEveryoneBlock+targetBlocks)||'<div style="color:var(--t3);font-size:.82rem;padding:8px">'+esc(t('noTargets'))+'</div>';
 
   // Crons
-  $('crBlocks').innerHTML=(D.cronJobs||[]).map(cr=>{
-    const linkedCount=(D.serviceCrons||[]).filter(sc=>sc.cron_id===cr.id).length;
+  $('crBlocks').innerHTML=(D.cronJobs||[]).filter(function(cr){return isCronVisible(cr.id)}).map(cr=>{
+    const linkedCount=getVisibleCronLinkedCount(cr.id);
     const sBadge=cr.schedule_type==='daily'?('\\u23F0 '+cr.schedule_time):('\\u2B50 '+cr.schedule_time.slice(0,16).replace('T',' '));
     const avatar = cr.thumbnail || (cr.name||'C').charAt(0).toUpperCase();
     return '<div class="blk cr" draggable="true" ondragstart="dragMoved=false;onDragStart(event,\\'cron\\',\\''+cr.id+'\\',\\''+esc(cr.name).replace(/'/g,"\\\\&#39;")+'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
@@ -2254,7 +2542,7 @@ function renderProviders(){
 async function delCron(id){if(!await showConfirm(t('confirmDeleteCron'),'🗑️'))return;await api('/api/crons/'+id,'DELETE');load()}
 
 function onSvcDragOver(e){
-  if(!dragData||dragData.type!=='cron')return;
+  if(!dragData||(dragData.type!=='cron'&&dragData.type!=='target'))return;
   e.preventDefault();e.dataTransfer.dropEffect='move';
   const wrap=e.currentTarget.closest?e.currentTarget:e.currentTarget;
   wrap.classList.add('cron-over');
@@ -2264,13 +2552,28 @@ function onSvcDragLeave(e){
 }
 async function onSvcDrop(e,svcId){
   e.preventDefault();e.currentTarget.classList.remove('cron-over');
-  if(!dragData||dragData.type!=='cron')return;
-  await attachCronToServices([svcId]);
+  if(!dragData)return;
+  if(dragData.type==='cron'){await attachCronToServices([svcId]);return}
+  if(dragData.type==='target'){await addTargetToGroup([svcId],dragData);return}
 }
 async function onGroupDrop(e,svcIds){
   e.preventDefault();e.currentTarget.classList.remove('cron-over');
-  if(!dragData||dragData.type!=='cron')return;
-  await attachCronToServices(svcIds);
+  if(!dragData)return;
+  if(dragData.type==='cron'){await attachCronToServices(svcIds);return}
+  if(dragData.type==='target'){await addTargetToGroup(svcIds,dragData);return}
+}
+async function addTargetToGroup(svcIds,data){
+  const svc=D.services.find(s=>s.id===svcIds[0]);
+  if(!svc)return;
+  const ch=D.managedChannels.find(c=>c.id===svc.channel_id);
+  if(ch&&data.platform&&ch.type!==data.platform){showAlert(t('typeMismatch'),'⚠️');return}
+  const resolvedTargetId=resolveTargetIdForPlatform(data.id,ch?ch.type:'');
+  if(!resolvedTargetId){showAlert(t('typeMismatch'),'⚠️');return}
+  const already=D.services.find(s=>s.agent_profile_id===svc.agent_profile_id&&s.channel_id===svc.channel_id&&s.target_id===resolvedTargetId);
+  if(already)return;
+  const res=await api('/api/services','POST',{agentProfileId:svc.agent_profile_id,channelId:svc.channel_id,targetId:resolvedTargetId});
+  if(res.error){showAlert(res.error,'⚠️');return}
+  load();
 }
 async function attachCronToServices(svcIds){
   const cronId=dragData.id;
@@ -2284,6 +2587,17 @@ async function attachCronToServices(svcIds){
       const missing=hints.filter(h=>!ag.skills[h]);
       if(missing.length){showAlert(t('missingSkills')+missing.join(', '));return}
     }
+  }
+  const templateSvcId=svcIds.find(id=>{
+    const svc=(D.services||[]).find(s=>s.id===id);
+    const tg=svc&&(D.targets||[]).find(t=>t.id===svc.target_id);
+    return tg&&tg.target_type==='everyone';
+  });
+  if(templateSvcId){
+    const already=(D.serviceCrons||[]).find(sc=>sc.service_id===templateSvcId&&sc.cron_id===cronId);
+    if(!already) await api('/api/services/'+templateSvcId+'/crons','POST',{cronId,scheduleType:cj.schedule_type,scheduleTime:cj.schedule_time});
+    load();
+    return;
   }
   for(const sid of svcIds){
     const already=(D.serviceCrons||[]).find(sc=>sc.service_id===sid&&sc.cron_id===cronId);
@@ -2302,6 +2616,15 @@ async function removeFromGroup(svcId){
 async function detachCronFromGroup(groupKey,cronId){
   const g=groupKey.split('::');
   const svcs=(D.services||[]).filter(s=>s.agent_profile_id===g[0]&&s.channel_id===g[1]);
+  const templateSvc=svcs.find(s=>{
+    const tg=(D.targets||[]).find(t=>t.id===s.target_id);
+    return tg&&tg.target_type==='everyone';
+  });
+  if(templateSvc){
+    await api('/api/services/'+templateSvc.id+'/crons/'+cronId,'DELETE');
+    load();
+    return;
+  }
   for(const s of svcs) await api('/api/services/'+s.id+'/crons/'+cronId,'DELETE');
   load();
 }
@@ -2390,6 +2713,10 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
   if (tab === 'agents') loadAgentsTab();
   if (tab === 'skills') loadSkillsTab();
+}
+function toggleSidebar(){
+  const sb=$('sidebar'),ov=$('sidebarOverlay');
+  sb.classList.toggle('open');ov.classList.toggle('show');
 }
 
 // ── Agents Tab (split layout: list + detail) ──
@@ -3004,7 +3331,10 @@ export function startWebUiServer(
       }
       if (url.pathname === '/api/channels' && req.method === 'POST') {
         const body = await readJsonBody(req);
-        const type = body.type === 'telegram' ? body.type : null;
+        const validTypes: ChannelType[] = ['telegram', 'discord', 'slack'];
+        const type = validTypes.includes(body.type as ChannelType)
+          ? (body.type as ChannelType)
+          : null;
         const name = typeof body.name === 'string' ? body.name.trim() : '';
         if (!type || !name) throw new Error('type/name required');
         const id = context.createManagedChannel({
@@ -3054,9 +3384,7 @@ export function startWebUiServer(
         context.updateManagedChannel(id, {
           name: typeof body.name === 'string' ? body.name : undefined,
           autoSession:
-            typeof body.autoSession === 'number'
-              ? body.autoSession
-              : undefined,
+            typeof body.autoSession === 'number' ? body.autoSession : undefined,
         });
         sendJson(res, 200, { ok: true });
         return;
@@ -3084,8 +3412,12 @@ export function startWebUiServer(
             ? body.platform
             : 'telegram'
         ) as 'telegram' | 'discord' | 'slack';
-        const targetType =
-          body.targetType === 'room' ? ('room' as const) : ('user' as const);
+        const validTargetTypes: TargetType[] = ['user', 'room'];
+        const targetType = validTargetTypes.includes(
+          body.targetType as TargetType,
+        )
+          ? (body.targetType as TargetType)
+          : ('user' as const);
         if (!targetId || !nickname)
           throw new Error('targetId/nickname required');
         const id = context.createTarget({
@@ -3105,7 +3437,12 @@ export function startWebUiServer(
           url.pathname.replace('/api/targets/', ''),
         );
         const body = await readJsonBody(req);
+        const existing = context.listTargets().find((tg) => tg.id === id);
+        if (existing?.target_type === 'everyone') {
+          throw new Error('everyone target is system-managed');
+        }
         const validPlats: string[] = ['telegram', 'discord', 'slack'];
+        const validTargetTypes: TargetType[] = ['user', 'room', 'everyone'];
         context.updateTarget(id, {
           targetId:
             typeof body.targetId === 'string' ? body.targetId : undefined,
@@ -3114,14 +3451,22 @@ export function startWebUiServer(
           platform: validPlats.includes(body.platform as string)
             ? (body.platform as 'telegram' | 'discord' | 'slack')
             : undefined,
+          targetType: validTargetTypes.includes(body.targetType as TargetType)
+            ? (body.targetType as TargetType)
+            : undefined,
         });
         sendJson(res, 200, { ok: true });
         return;
       }
       if (url.pathname.startsWith('/api/targets/') && req.method === 'DELETE') {
-        context.deleteTarget(
-          decodeURIComponent(url.pathname.replace('/api/targets/', '')),
+        const id = decodeURIComponent(
+          url.pathname.replace('/api/targets/', ''),
         );
+        const existing = context.listTargets().find((tg) => tg.id === id);
+        if (existing?.target_type === 'everyone') {
+          throw new Error('everyone target is system-managed');
+        }
+        context.deleteTarget(id);
         sendJson(res, 200, { ok: true });
         return;
       }
@@ -3166,9 +3511,10 @@ export function startWebUiServer(
         !url.pathname.includes('/crons') &&
         req.method === 'DELETE'
       ) {
-        context.deleteService(
-          decodeURIComponent(url.pathname.replace('/api/services/', '')),
+        const serviceId = decodeURIComponent(
+          url.pathname.replace('/api/services/', ''),
         );
+        context.deleteService(serviceId);
         sendJson(res, 200, { ok: true });
         return;
       }
@@ -3435,6 +3781,23 @@ export function startWebUiServer(
         req.method === 'GET'
       ) {
         sendJson(res, 200, context.getGogStatus());
+        return;
+      }
+
+      if (
+        url.pathname === '/api/integrations/slack/manifest' &&
+        req.method === 'GET'
+      ) {
+        const appName = url.searchParams.get('appName') || undefined;
+        const botName = url.searchParams.get('botName') || undefined;
+        const manifestJson = getSlackAppManifestJson({ appName, botName });
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition':
+            'attachment; filename="agentsalad-slack-manifest.json"',
+          'Cache-Control': 'no-cache, no-store',
+        });
+        res.end(manifestJson);
         return;
       }
 

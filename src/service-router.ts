@@ -6,11 +6,17 @@
  *
  * DM 메시지: findActiveService(channelId, userId) → user 타겟 매칭
  * 채널 메시지: findActiveServiceByRoom(channelId, roomId) → room 타겟 매칭
- * 자동 세션: auto_session=1인 채널에서 미매칭 시 Target+Service 자동 생성
+ * everyone 템플릿: 에이전트+채널+모두에게 서비스가 있으면 미매칭 시
+ * 실제 userId/roomId별 Target+Service를 자동 생성
+ * auto_session 레거시는 폐기되었고, 퍼블릭 자동 생성은 everyone 템플릿만 사용한다.
  *
  * Cron 스케줄러도 processCronMessage()를 통해 동일한 파이프라인 사용.
  * 채널 팩토리: createChannelByType()으로 Telegram/Discord/Slack 분기.
  * 워크스페이스 3-depth: store/workspaces/<agent>/<channel>/<target>/
+ * 최근 수정: 자동 생성 타겟은 target_id 기반 folder_name으로 워크스페이스를
+ * 고정하고, 표시 닉네임은 프롬프트/화면 표시용으로만 사용한다.
+ * 최근 수정: 퍼블릭 자동 생성은 everyone 템플릿만 사용하고, 생성 서비스에
+ * provenance(creation_source, spawned_from_template_service_id)를 기록한다.
  */
 import {
   addConversationMessage,
@@ -18,7 +24,7 @@ import {
   createTarget,
   findActiveService,
   findActiveServiceByRoom,
-  findSingleAgentForChannel,
+  findEveryoneTemplateService,
   getConversationHistory,
   getAgentProfileById,
   getEnabledCustomSkills,
@@ -26,7 +32,7 @@ import {
   getManagedChannelById,
   getServiceById,
   getTargetById,
-  getTargetByTargetId,
+  getTargetByTargetIdAndType,
   listServices,
   listManagedChannels,
 } from './db.js';
@@ -47,6 +53,7 @@ import { verifyDiscordBot } from './channels/discord.js';
 import { verifySlackBot } from './channels/slack.js';
 import { compactIfNeeded } from './compaction.js';
 import { executePlan, readPlanFile } from './plan-executor.js';
+import { toFolderSlug } from './skills/workspace.js';
 
 const MAX_HISTORY_MESSAGES = 200;
 
@@ -134,50 +141,37 @@ const handleMessage: OnServiceMessage = (
   );
 };
 
-/**
- * 자동 세션 생성: auto_session=1인 채널에서 미매칭 시 Target+Service 자동 생성.
- * 에이전트가 1개인 경우만 자동 생성 (2개 이상이면 어떤 에이전트인지 결정 불가).
- * 반환: 생성된 서비스 정보 또는 undefined.
- */
-function tryAutoCreateSession(
-  channelId: string,
+function createTargetAndServiceFromTemplate(
+  templateService: NonNullable<ReturnType<typeof findEveryoneTemplateService>>,
   platformId: string,
   displayName: string,
   targetType: 'user' | 'room',
 ): ReturnType<typeof findActiveService> {
-  const mc = getManagedChannelById(channelId);
-  if (!mc || mc.auto_session !== 1) return undefined;
+  const channel = getManagedChannelById(templateService.channel_id);
+  if (!channel) return undefined;
 
-  const agent = findSingleAgentForChannel(channelId);
-  if (!agent) {
-    logger.debug(
-      { channelId, platformId },
-      'Auto-session skipped: no single agent for channel',
-    );
-    return undefined;
-  }
+  const existingTarget = getTargetByTargetIdAndType(platformId, targetType);
+  let targetInternalId = existingTarget?.id;
 
-  const provider = getLlmProviderById(agent.provider_id);
-  if (!provider) return undefined;
-
-  const existingTarget = getTargetByTargetId(platformId);
-  let targetInternalId: string;
-
-  if (existingTarget) {
-    targetInternalId = existingTarget.id;
-  } else {
+  if (!targetInternalId) {
     targetInternalId = `tgt-${Date.now().toString(36)}`;
-    const platform = mc.type;
     createTarget({
       id: targetInternalId,
       targetId: platformId,
       nickname: displayName,
-      platform,
+      platform: channel.type,
       targetType,
+      folderName: toFolderSlug(platformId),
     });
     logger.info(
-      { channelId, platformId, targetType, targetInternalId },
-      'Auto-session: target created',
+      {
+        channelId: templateService.channel_id,
+        platformId,
+        targetType,
+        templateServiceId: templateService.id,
+        targetInternalId,
+      },
+      'Everyone template: target created',
     );
   }
 
@@ -185,26 +179,69 @@ function tryAutoCreateSession(
   try {
     createService({
       id: serviceId,
-      agentProfileId: agent.id,
-      channelId,
+      agentProfileId: templateService.agent.id,
+      channelId: templateService.channel_id,
       targetId: targetInternalId,
+      creationSource: 'everyone_template',
+      spawnedFromTemplateServiceId: templateService.id,
     });
   } catch (err) {
     logger.warn(
-      { channelId, platformId, err: err instanceof Error ? err.message : String(err) },
-      'Auto-session: service creation failed (may already exist)',
+      {
+        channelId: templateService.channel_id,
+        platformId,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      'Everyone template: service creation failed (may already exist)',
     );
-    // 이미 존재하면 기존 서비스를 조회
-    if (targetType === 'user') return findActiveService(channelId, platformId);
-    return findActiveServiceByRoom(channelId, platformId);
+    if (targetType === 'user')
+      return findActiveService(templateService.channel_id, platformId);
+    return findActiveServiceByRoom(templateService.channel_id, platformId);
   }
 
   logger.info(
-    { channelId, serviceId, agentId: agent.id, platformId, targetType },
-    'Auto-session: service created',
+    {
+      channelId: templateService.channel_id,
+      templateServiceId: templateService.id,
+      serviceId,
+      agentId: templateService.agent.id,
+      platformId,
+      targetType,
+    },
+    'Everyone template: service created',
   );
 
-  return { id: serviceId, agent_profile_id: agent.id, channel_id: channelId, target_id: targetInternalId, status: 'active' as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), agent, provider };
+  return {
+    id: serviceId,
+    agent_profile_id: templateService.agent.id,
+    channel_id: templateService.channel_id,
+    target_id: targetInternalId,
+    creation_source: 'everyone_template' as const,
+    spawned_from_template_service_id: templateService.id,
+    status: 'active' as const,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    agent: templateService.agent,
+    provider: templateService.provider,
+  };
+}
+
+function resolveTemplateService(
+  channelId: string,
+  platformId: string,
+  displayName: string,
+  targetType: 'user' | 'room',
+): ReturnType<typeof findActiveService> {
+  const templateService = findEveryoneTemplateService(channelId);
+  if (templateService) {
+    return createTargetAndServiceFromTemplate(
+      templateService,
+      platformId,
+      displayName,
+      targetType,
+    );
+  }
+  return undefined;
 }
 
 /**
@@ -226,13 +263,23 @@ async function processMessage(
   if (isDM) {
     serviceMatch = findActiveService(channelId, senderUserId);
     if (!serviceMatch) {
-      serviceMatch = tryAutoCreateSession(channelId, senderUserId, senderName, 'user');
+      serviceMatch = resolveTemplateService(
+        channelId,
+        senderUserId,
+        senderName,
+        'user',
+      );
     }
   } else if (roomId) {
     // 서버 채널 메시지: room 타겟 매칭
     serviceMatch = findActiveServiceByRoom(channelId, roomId);
     if (!serviceMatch) {
-      serviceMatch = tryAutoCreateSession(channelId, roomId, `#${roomId}`, 'room');
+      serviceMatch = resolveTemplateService(
+        channelId,
+        roomId,
+        `#${roomId}`,
+        'room',
+      );
     }
   } else {
     serviceMatch = undefined;
@@ -263,6 +310,8 @@ async function processMessage(
   const target = getTargetById(serviceMatch.target_id);
   const isRoomTarget = target?.target_type === 'room';
   const targetName = target?.nickname || senderName;
+  const targetFolderName =
+    target?.folder_name || target?.target_id || senderUserId;
 
   // typing 대상: DM은 유저에게, room은 typing 안 보냄 (채널 typing은 부자연스러움)
   const typingTarget = isRoomTarget ? '' : senderUserId;
@@ -314,6 +363,7 @@ async function processMessage(
       serviceId,
       channelId,
       targetName,
+      targetFolderName,
       sendPhoto: sendPhotoToUser,
     };
     if (agent.smart_step === 1) {
@@ -355,7 +405,9 @@ async function processMessage(
 
     if (!response.trim()) {
       logger.warn({ serviceId }, 'Empty response from provider');
-      await sendResponse('⚠️ AI로부터 빈 응답을 받았습니다. 다시 시도해주세요.').catch(() => {});
+      await sendResponse(
+        '⚠️ AI로부터 빈 응답을 받았습니다. 다시 시도해주세요.',
+      ).catch(() => {});
       return;
     }
 
@@ -387,6 +439,7 @@ async function processMessage(
               prompt,
               sendToUser,
               targetName,
+              targetFolderName,
               channelId,
             ),
           sendNotification: sendToUser,
@@ -584,6 +637,7 @@ async function processPlanTurn(
   batchPrompt: string,
   sendToUser: (text: string) => Promise<void>,
   targetName?: string,
+  targetFolderName?: string,
   planChannelId?: string,
 ): Promise<string> {
   addConversationMessage(serviceId, 'user', batchPrompt);
@@ -607,6 +661,7 @@ async function processPlanTurn(
     serviceId,
     channelId: planChannelId,
     targetName,
+    targetFolderName,
   };
   const { tools, skillPrompts } = await resolveSkills(
     agent,
@@ -696,6 +751,7 @@ export async function processCronMessage(
     const target = getTargetById(targetId);
     const platformUserId = target?.target_id || '';
     const cronTargetName = target?.nickname || '';
+    const cronTargetFolderName = target?.folder_name || platformUserId;
     const isRoomTarget = target?.target_type === 'room';
 
     if (notify && platformUserId && !isRoomTarget) {
@@ -726,6 +782,7 @@ export async function processCronMessage(
       serviceId,
       channelId: service.channel_id,
       targetName: cronTargetName,
+      targetFolderName: cronTargetFolderName,
       sendPhoto: cronSendPhoto,
     });
     const hasTools = Object.keys(tools).length > 0;

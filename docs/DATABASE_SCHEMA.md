@@ -20,12 +20,17 @@ Active service bindings (Agent + Channel + Target).
 | `agent_profile_id` | TEXT FK | References agent_profiles |
 | `channel_id` | TEXT FK | References managed_channels |
 | `target_id` | TEXT FK | References targets |
+| `creation_source` | TEXT | `manual` or `everyone_template` |
+| `spawned_from_template_service_id` | TEXT FK NULL | Parent everyone template service ID when auto-created |
 | `status` | TEXT | `active` / `paused` / `error` |
 | `created_at` | TEXT | |
 | `updated_at` | TEXT | |
 
 - Unique: `(agent_profile_id, channel_id, target_id)`
 - Index: `(channel_id, target_id)` — fast lookup during message routing
+- `creation_source = 'manual'`: 사용자가 직접 만든 샐러드
+- `creation_source = 'everyone_template'`: `모두에게` 템플릿에서 자동 생성된 샐러드
+- 기존 데이터는 하위 호환을 위해 모두 `manual`로 간주
 
 ### `conversations`
 Per-service message history for LLM context.
@@ -99,13 +104,12 @@ Full conversation backup before each compaction. One row per compaction event.
 | `status` | TEXT | `configured` / `active` |
 | `pairing_status` | TEXT | `pending` / `paired` / `error` |
 | `folder_name` | TEXT | Workspace folder name (type-name slug, workspace 3-depth 중간층) |
-| `auto_session` | INTEGER | 0 = off (default), 1 = auto-create Target+Service for new users/rooms |
+| `auto_session` | INTEGER | Deprecated legacy field. No longer used for runtime auto-creation |
 | `thumbnail` | TEXT | Food emoji thumbnail (randomly assigned) |
 | `created_at` | TEXT | |
 | `updated_at` | TEXT | |
 
-- `auto_session`: Discord/Slack 전용. 활성화 시 미등록 유저의 DM이나 채널 @멘션에 자동으로 Target+Service 생성.
-- 자동 생성 조건: 해당 채널에 연결된 에이전트가 정확히 1개일 때만 (2개 이상이면 어떤 에이전트인지 결정 불가).
+- `auto_session`: 구 버전 호환용 필드만 남아 있으며, 현재 런타임 자동 생성은 `everyone` 템플릿만 사용한다.
 
 ## Target Table
 
@@ -117,13 +121,17 @@ Full conversation backup before each compaction. One row per compaction event.
 | `target_id` | TEXT UNIQUE | Platform user ID or room/channel ID |
 | `nickname` | TEXT | Display name (room targets use `#channel-name` convention) |
 | `platform` | TEXT | `telegram` / `discord` / `slack` (ChannelType) |
-| `target_type` | TEXT | `user` (DM target) / `room` (channel/thread target). Default `user` |
+| `target_type` | TEXT | `user` (DM target) / `room` (channel/thread target) / `everyone` (default auto-create template). Default `user` |
+| `folder_name` | TEXT | Stable workspace folder key. Auto-created targets use ID-based slug instead of nickname |
 | `thumbnail` | TEXT | Food emoji thumbnail (randomly assigned) |
 | `created_at` | TEXT | |
 | `updated_at` | TEXT | |
 
 - `target_type = 'user'`: DM으로 응답. Telegram/Discord/Slack 공통.
 - `target_type = 'room'`: 해당 채널/스레드에 응답. Discord/Slack 전용 (Telegram 미지원).
+- `target_type = 'everyone'`: 실제 공유 타겟이 아니라, `에이전트 + 채널 + 모두에게` 서비스의 기본 템플릿. 플랫폼별로 시스템이 기본 제공하며, 새 DM/userId 또는 roomId가 들어오면 실제 `user`/`room` 타겟과 개별 서비스가 생성된다.
+- `folder_name`: 워크스페이스 경로용 불변 키. 수동 생성 타겟은 기본적으로 닉네임 slug를 쓰고, 자동 생성 타겟은 `target_id` 기반 slug를 저장해 표시명 변경과 폴더 경로를 분리한다.
+- `everyone` 타겟은 시스템 관리 대상이다. 수동 생성/수정/삭제 대상이 아니며 UI에서는 항상 노출된다.
 
 ## LLM Provider Table
 
@@ -240,7 +248,7 @@ Service ↔ Cron junction table. One cron can be reused across multiple services
 
 - Service matching (user target): lookup by `channel_id + target.target_id` where `target_type='user'`
 - Service matching (room target): lookup by `channel_id + target.target_id` where `target_type='room'`
-- Auto-session: `managed_channels.auto_session=1` + single agent → auto-create target+service on first interaction
+- Public auto-create: only `everyone` template services can spawn new target+service bindings on first interaction
 - Conversation context: up to 200 recent messages per service
 - Service deletion cascades to conversations and archives
 - Agent deletion cascades to linked services, custom skill assignments, and workspace (default profile cannot be deleted)
