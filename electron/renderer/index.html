@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -83,21 +83,21 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 
   <!-- Stopped -->
   <div data-view="stopped" class="active">
-    <div class="subtitle">서버가 꺼져 있습니다.</div>
+    <div class="subtitle">Server is not running.</div>
     <div class="status-badge stopped"><span class="dot"></span>Stopped</div>
     <button class="btn btn-start" id="btn-start">Start Server</button>
   </div>
 
   <!-- Checking Node.js -->
   <div data-view="checking">
-    <div class="subtitle">환경을 확인하는 중...</div>
+    <div class="subtitle">Checking environment...</div>
     <div class="status-badge checking"><span class="dot"></span>Checking</div>
     <div class="spinner blue"></div>
   </div>
 
   <!-- Installing dependencies -->
   <div data-view="installing">
-    <div class="subtitle">의존성을 설치하는 중입니다...<br><small style="color:var(--t3)">첫 실행 시에만 소요됩니다.</small></div>
+    <div class="subtitle">Installing dependencies...<br><small style="color:var(--t3)">Only required on first launch.</small></div>
     <div class="status-badge installing"><span class="dot"></span>Installing</div>
     <div class="progress-bar"><div class="fill"></div></div>
     <button class="btn btn-stop btn-sm" id="btn-stop-installing">Cancel</button>
@@ -105,7 +105,7 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 
   <!-- Starting server -->
   <div data-view="starting">
-    <div class="subtitle">서버를 시작하는 중...</div>
+    <div class="subtitle">Starting server...</div>
     <div class="status-badge starting"><span class="dot"></span>Starting</div>
     <div class="spinner"></div>
     <button class="btn btn-stop btn-sm" id="btn-stop-starting">Cancel</button>
@@ -114,7 +114,7 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
   <!-- Error -->
   <div data-view="error">
     <div class="status-badge error"><span class="dot"></span>Error</div>
-    <div class="error-msg" id="error-msg">서버 시작에 실패했습니다.</div>
+    <div class="error-msg" id="error-msg">Failed to start server.</div>
     <button class="btn btn-start" id="btn-retry">Retry</button>
   </div>
 

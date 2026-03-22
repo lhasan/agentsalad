@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Salad — Your AI Agent, Your Rules</title>
+<meta name="description" content="Run your own AI agent on a spare computer. Three steps. No coding required. Mac, Windows, Linux.">
+<meta property="og:title" content="Agent Salad — Your AI Agent, Your Rules">
+<meta property="og:description" content="Create an agent, connect a channel, add a target. That's it.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fafaf9;--surface:#fff;--border:#e7e5e4;
+  --text:#1c1917;--text-2:#57534e;--text-3:#a8a29e;
+  --green:#16a34a;--green-light:#dcfce7;--green-dark:#15803d;
+  --accent:#f0fdf4;
+  --radius:12px;--radius-sm:8px;
+  --max-w:1080px;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* Layout */
+.container{max-width:var(--max-w);margin:0 auto;padding:0 24px}
+section{padding:80px 0}
+@media(max-width:640px){section{padding:56px 0}}
+
+/* Nav */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(250,250,249,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+nav .container{display:flex;align-items:center;justify-content:space-between;height:56px}
+.nav-logo{font-weight:700;font-size:18px;color:var(--text);text-decoration:none;display:flex;align-items:center;gap:8px}
+.nav-logo span{color:var(--green)}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{color:var(--text-2);text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+.nav-gh{display:flex;align-items:center;gap:6px}
+@media(max-width:640px){.nav-links .hide-mobile{display:none}}
+
+/* Hero */
+.hero{padding-top:140px;padding-bottom:80px;text-align:center}
+.hero-badge{display:inline-block;padding:6px 16px;background:var(--green-light);color:var(--green-dark);font-size:13px;font-weight:600;border-radius:100px;margin-bottom:24px}
+.hero h1{font-size:clamp(36px,5vw,56px);font-weight:700;line-height:1.1;letter-spacing:-.02em;margin-bottom:20px}
+.hero h1 em{font-style:normal;color:var(--green)}
+.hero p{font-size:18px;color:var(--text-2);max-width:560px;margin:0 auto 40px}
+.hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:var(--radius);font-size:15px;font-weight:600;text-decoration:none;transition:all .2s;border:none;cursor:pointer}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:var(--green-dark);transform:translateY(-1px);box-shadow:0 4px 12px rgba(22,163,74,.3)}
+.btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--text-3);transform:translateY(-1px)}
+.btn svg{width:18px;height:18px}
+.hero-note{margin-top:16px;font-size:13px;color:var(--text-3)}
+
+/* Steps */
+.steps-section{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.section-label{font-size:13px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.section-title{font-size:clamp(24px,3.5vw,36px);font-weight:700;letter-spacing:-.01em;margin-bottom:48px}
+.steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:32px}
+@media(max-width:768px){.steps-grid{grid-template-columns:1fr;gap:24px}}
+.step{text-align:center;padding:32px 24px}
+.step-num{width:48px;height:48px;border-radius:50%;background:var(--green-light);color:var(--green);font-weight:700;font-size:20px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px}
+.step h3{font-size:18px;font-weight:600;margin-bottom:8px}
+.step p{font-size:14px;color:var(--text-2);line-height:1.6}
+
+/* Use cases */
+.uses-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+@media(max-width:768px){.uses-grid{grid-template-columns:1fr}}
+.use-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;transition:border-color .2s}
+.use-card:hover{border-color:var(--green)}
+.use-icon{font-size:28px;margin-bottom:12px}
+.use-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
+.use-card p{font-size:14px;color:var(--text-2);line-height:1.6}
+
+/* Skills */
+.skills-section{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.skills-wrap{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+@media(max-width:768px){.skills-wrap{grid-template-columns:1fr;gap:32px}}
+.skill-group h3{font-size:20px;font-weight:700;margin-bottom:6px}
+.skill-group>p{font-size:14px;color:var(--text-2);margin-bottom:20px}
+.skill-list{display:flex;flex-direction:column;gap:10px}
+.skill-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);font-size:14px;font-weight:500}
+.skill-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.skill-item span.sub{color:var(--text-3);font-weight:400;margin-left:4px}
+
+.custom-highlight{background:var(--accent);border:1px dashed var(--green);border-radius:var(--radius);padding:24px;margin-top:16px}
+.custom-highlight p{font-size:14px;color:var(--text-2);line-height:1.7}
+.custom-highlight code{background:var(--green-light);padding:2px 6px;border-radius:4px;font-size:13px;color:var(--green-dark)}
+
+/* Philosophy */
+.philosophy{text-align:center;max-width:640px;margin:0 auto}
+.philosophy blockquote{font-size:clamp(20px,3vw,28px);font-weight:600;line-height:1.4;letter-spacing:-.01em;margin-bottom:16px;color:var(--text)}
+.philosophy blockquote em{font-style:normal;color:var(--green)}
+.philosophy p{font-size:15px;color:var(--text-2)}
+
+/* Download */
+.download-section{background:var(--green);color:#fff;text-align:center}
+.download-section .section-label{color:rgba(255,255,255,.7)}
+.download-section .section-title{color:#fff;margin-bottom:12px}
+.download-section .dl-sub{font-size:15px;color:rgba(255,255,255,.8);margin-bottom:36px}
+.dl-buttons{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.btn-dl{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(4px)}
+.btn-dl:hover{background:rgba(255,255,255,.25);transform:translateY(-1px)}
+.dl-note{margin-top:20px;font-size:13px;color:rgba(255,255,255,.6)}
+.dl-note a{color:rgba(255,255,255,.8);text-decoration:underline}
+
+/* Preview mockup */
+.preview-section{padding-bottom:0}
+.mockup-window{max-width:960px;margin:0 auto;border-radius:12px 12px 0 0;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.12),0 0 0 1px rgba(0,0,0,.06);background:var(--surface)}
+.mockup-bar{height:36px;background:#f5f5f4;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px}
+.mockup-dot{width:10px;height:10px;border-radius:50%}
+.mockup-dot.r{background:#ef4444}.mockup-dot.y{background:#eab308}.mockup-dot.g{background:#22c55e}
+.mockup-url{flex:1;margin-left:12px;background:#fff;border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:11px;color:var(--text-3);font-family:'Inter',monospace}
+.mockup-body{display:flex;height:420px;overflow:hidden}
+@media(max-width:768px){.mockup-body{height:340px}}
+@media(max-width:480px){.mockup-body{height:280px;flex-direction:column}}
+
+/* Mockup sidebar */
+.m-sidebar{width:200px;background:#fafaf9;border-right:1px solid var(--border);padding:14px 10px;flex-shrink:0;display:flex;flex-direction:column;gap:16px}
+@media(max-width:640px){.m-sidebar{width:150px;padding:10px 8px}}
+@media(max-width:480px){.m-sidebar{display:none}}
+.m-tab{display:flex;gap:4px;margin-bottom:4px}
+.m-tab-btn{padding:5px 10px;border-radius:6px;font-size:10px;font-weight:600;border:none;cursor:default}
+.m-tab-btn.active{background:var(--green-light);color:var(--green-dark)}
+.m-tab-btn.inactive{background:transparent;color:var(--text-3)}
+.m-sec{margin-bottom:2px}
+.m-sec-title{font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding:0 4px}
+.m-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:5px;cursor:default;transition:border-color .2s}
+.m-card:hover{border-color:var(--green)}
+.m-card-name{font-size:11px;font-weight:600;color:var(--text)}
+.m-card-sub{font-size:9px;color:var(--text-3);margin-top:1px}
+.m-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:8px;font-weight:700;margin-left:4px}
+.m-badge-tg{background:#e0f2fe;color:#0284c7}
+.m-badge-dc{background:#ede9fe;color:#7c3aed}
+.m-badge-sk{background:#fef3c7;color:#d97706}
+
+/* Mockup main */
+.m-main{flex:1;padding:16px 20px;overflow:hidden;display:flex;flex-direction:column;gap:14px}
+@media(max-width:640px){.m-main{padding:12px 14px;gap:10px}}
+.m-header{display:flex;align-items:center;justify-content:space-between}
+.m-header h2{font-size:14px;font-weight:700}
+.m-header-btns{display:flex;gap:6px}
+.m-hbtn{padding:4px 10px;border-radius:6px;font-size:9px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text-2);cursor:default}
+
+/* Make a Salad area */
+.m-salad-area{display:flex;gap:10px;align-items:stretch}
+@media(max-width:640px){.m-salad-area{gap:6px}}
+.m-drop{flex:1;border:2px dashed var(--border);border-radius:10px;padding:12px 8px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:72px;transition:all .3s}
+.m-drop.filled{border-color:var(--green);background:var(--accent)}
+.m-drop-icon{font-size:18px}
+.m-drop-label{font-size:9px;font-weight:600;color:var(--text-3)}
+.m-drop-val{font-size:10px;font-weight:600;color:var(--green-dark)}
+.m-salad-btn{padding:8px 16px;border-radius:8px;background:var(--green);color:#fff;font-size:11px;font-weight:700;border:none;cursor:default;align-self:center;white-space:nowrap;flex-shrink:0}
+.m-salad-arrow{font-size:16px;color:var(--text-3);align-self:center;flex-shrink:0}
+
+/* Service cards */
+.m-services{flex:1;overflow:hidden}
+.m-svc-title{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.m-svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:640px){.m-svc-grid{grid-template-columns:1fr}}
+.m-svc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;position:relative}
+.m-svc-status{position:absolute;top:10px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--green)}
+.m-svc .m-card-name{font-size:11px;margin-bottom:3px}
+.m-svc-route{font-size:9px;color:var(--text-3);display:flex;align-items:center;gap:4px}
+.m-svc-route span{background:var(--green-light);color:var(--green-dark);padding:1px 5px;border-radius:3px;font-size:8px;font-weight:600}
+.m-svc-cron{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:9px;color:var(--text-2);display:flex;align-items:center;gap:4px}
+
+/* Fade out bottom */
+.mockup-body{position:relative}
+.mockup-body::after{content:'';position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,var(--surface));pointer-events:none}
+
+/* Footer */
+footer{padding:32px 0;text-align:center;font-size:13px;color:var(--text-3)}
+footer a{color:var(--text-2);text-decoration:none}
+footer a:hover{color:var(--text)}
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="container">
+    <a href="#" class="nav-logo"><span>🥗</span> Agent Salad</a>
+    <div class="nav-links">
+      <a href="#how-it-works" class="hide-mobile">How it works</a>
+      <a href="#skills" class="hide-mobile">Skills</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/qwibitai/agentsalad" target="_blank" class="nav-gh">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">Open Source · Elastic License 2.0</div>
+    <h1>Your <em>AI Agent</em>,<br>Your Rules.</h1>
+    <p>Agent, Channel, Target — three inputs and your personal AI service is live. On a computer you already own.</p>
+    <div class="hero-actions">
+      <a href="#download" class="btn btn-primary" id="hero-dl-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+      <a href="https://github.com/qwibitai/agentsalad" target="_blank" class="btn btn-secondary">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <p class="hero-note">macOS · Windows · Linux — No coding required</p>
+  </div>
+</section>
+
+<!-- Preview -->
+<section class="preview-section" id="preview">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:40px">
+      <div class="section-label">Preview</div>
+      <div class="section-title">Visual UI. Zero config files.</div>
+    </div>
+    <div class="mockup-window">
+      <div class="mockup-bar">
+        <div class="mockup-dot r"></div>
+        <div class="mockup-dot y"></div>
+        <div class="mockup-dot g"></div>
+        <div class="mockup-url">127.0.0.1:3210</div>
+      </div>
+      <div class="mockup-body">
+        <!-- Sidebar -->
+        <div class="m-sidebar">
+          <div class="m-tab">
+            <div class="m-tab-btn active">My Salads</div>
+            <div class="m-tab-btn inactive">Skills</div>
+          </div>
+
+          <div class="m-sec">
+            <div class="m-sec-title">Agents</div>
+            <div class="m-card">
+              <div class="m-card-name">English Tutor</div>
+              <div class="m-card-sub">Claude 4 Sonnet</div>
+            </div>
+            <div class="m-card">
+              <div class="m-card-name">News Curator</div>
+              <div class="m-card-sub">GPT-4o</div>
+            </div>
+            <div class="m-card">
+              <div class="m-card-name">Team Assistant</div>
+              <div class="m-card-sub">Gemini 2.5 Pro</div>
+            </div>
+          </div>
+
+          <div class="m-sec">
+            <div class="m-sec-title">Channels</div>
+            <div class="m-card">
+              <div class="m-card-name">My TG Bot <span class="m-badge m-badge-tg">TG</span></div>
+              <div class="m-card-sub">@myagent_bot</div>
+            </div>
+            <div class="m-card">
+              <div class="m-card-name">Team Discord <span class="m-badge m-badge-dc">DC</span></div>
+              <div class="m-card-sub">#ai-assistant</div>
+            </div>
+            <div class="m-card">
+              <div class="m-card-name">Work Slack <span class="m-badge m-badge-sk">SK</span></div>
+              <div class="m-card-sub">#general</div>
+            </div>
+          </div>
+
+          <div class="m-sec">
+            <div class="m-sec-title">Targets</div>
+            <div class="m-card">
+              <div class="m-card-name">Terry</div>
+              <div class="m-card-sub">DM · Telegram</div>
+            </div>
+            <div class="m-card">
+              <div class="m-card-name">Mom</div>
+              <div class="m-card-sub">DM · Telegram</div>
+            </div>
+            <div class="m-card">
+              <div class="m-card-name">#dev-team</div>
+              <div class="m-card-sub">Room · Discord</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main -->
+        <div class="m-main">
+          <div class="m-header">
+            <h2>🥗 My Salads</h2>
+            <div class="m-header-btns">
+              <div class="m-hbtn">API Key Settings</div>
+            </div>
+          </div>
+
+          <!-- Make a Salad -->
+          <div class="m-salad-area">
+            <div class="m-drop filled">
+              <div class="m-drop-icon">🤖</div>
+              <div class="m-drop-label">Agent</div>
+              <div class="m-drop-val">English Tutor</div>
+            </div>
+            <div class="m-salad-arrow">+</div>
+            <div class="m-drop filled">
+              <div class="m-drop-icon">📡</div>
+              <div class="m-drop-label">Channel</div>
+              <div class="m-drop-val">My TG Bot</div>
+            </div>
+            <div class="m-salad-arrow">+</div>
+            <div class="m-drop filled">
+              <div class="m-drop-icon">👤</div>
+              <div class="m-drop-label">Target</div>
+              <div class="m-drop-val">Mom</div>
+            </div>
+            <div class="m-salad-arrow">→</div>
+            <div class="m-salad-btn">Make Salad</div>
+          </div>
+
+          <!-- Active services -->
+          <div class="m-services">
+            <div class="m-svc-title">Active Salads</div>
+            <div class="m-svc-grid">
+              <div class="m-svc">
+                <div class="m-svc-status"></div>
+                <div class="m-card-name">English Tutor → Terry</div>
+                <div class="m-svc-route">
+                  <span>TG</span> My TG Bot → DM
+                </div>
+                <div class="m-svc-cron">⏰ Daily 07:00 — Morning lesson</div>
+              </div>
+              <div class="m-svc">
+                <div class="m-svc-status"></div>
+                <div class="m-card-name">News Curator → Terry</div>
+                <div class="m-svc-route">
+                  <span>TG</span> My TG Bot → DM
+                </div>
+                <div class="m-svc-cron">⏰ Daily 08:00 — News briefing</div>
+              </div>
+              <div class="m-svc">
+                <div class="m-svc-status"></div>
+                <div class="m-card-name">Team Assistant → #dev-team</div>
+                <div class="m-svc-route">
+                  <span>DC</span> Team Discord → Room
+                </div>
+              </div>
+              <div class="m-svc">
+                <div class="m-svc-status"></div>
+                <div class="m-card-name">English Tutor → Mom</div>
+                <div class="m-svc-route">
+                  <span>TG</span> My TG Bot → DM
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="steps-section" id="how-it-works">
+  <div class="container">
+    <div class="section-label">How it works</div>
+    <div class="section-title">Three steps. That's it.</div>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Create an Agent</h3>
+        <p>Pick any LLM provider — Claude, GPT, Gemini, Groq, or bring your own. Describe what it should do.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Connect a Channel</h3>
+        <p>Paste a bot token for Telegram, Discord, or Slack. Your agent goes live on the messenger you already use.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Add a Target</h3>
+        <p>A person for private DM, or a room for community-wide service. One agent can serve many targets.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Use cases -->
+<section id="use-cases">
+  <div class="container">
+    <div class="section-label">What you can do</div>
+    <div class="section-title">Your agent, everywhere.</div>
+    <div class="uses-grid">
+      <div class="use-card">
+        <div class="use-icon">👨‍👩‍👧</div>
+        <h3>Family Agent</h3>
+        <p>Make an agent for your parents. Private DM, simple and personal. They just talk to a bot — no setup on their end.</p>
+      </div>
+      <div class="use-card">
+        <div class="use-icon">💬</div>
+        <h3>Community AI</h3>
+        <p>Drop an agent into your Discord server or Slack workspace. Everyone in the channel gets instant AI access.</p>
+      </div>
+      <div class="use-card">
+        <div class="use-icon">📋</div>
+        <h3>Team Workspace</h3>
+        <p>Shared folders let team members collaborate through the agent. Collect tasks, share files, stay in sync — organically.</p>
+      </div>
+      <div class="use-card">
+        <div class="use-icon">⏰</div>
+        <h3>Scheduled Operations</h3>
+        <p>Set up cron jobs for batch messaging, daily summaries, or recurring check-ins across all your targets at once.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Skills -->
+<section class="skills-section" id="skills">
+  <div class="container">
+    <div class="section-label">Capabilities</div>
+    <div class="section-title">Built-in skills + infinite extensions.</div>
+    <div class="skills-wrap">
+      <div class="skill-group">
+        <h3>10 Built-in Skills</h3>
+        <p>Toggle on/off per agent. Ready out of the box.</p>
+        <div class="skill-list">
+          <div class="skill-item"><span class="skill-dot"></span>File Read / Write / List <span class="sub">— workspace scoped</span></div>
+          <div class="skill-item"><span class="skill-dot"></span>Web Fetch <span class="sub">— HTML to text</span></div>
+          <div class="skill-item"><span class="skill-dot"></span>Web Browse <span class="sub">— full Playwright browser</span></div>
+          <div class="skill-item"><span class="skill-dot"></span>Bash Command <span class="sub">— system shell access</span></div>
+          <div class="skill-item"><span class="skill-dot"></span>Gmail <span class="sub">— search, read, send</span></div>
+          <div class="skill-item"><span class="skill-dot"></span>Google Calendar <span class="sub">— list, create</span></div>
+          <div class="skill-item"><span class="skill-dot"></span>Google Drive <span class="sub">— list, download, upload</span></div>
+          <div class="skill-item"><span class="skill-dot"></span>Cron Jobs <span class="sub">— agent self-service scheduling</span></div>
+        </div>
+      </div>
+      <div class="skill-group">
+        <h3>Custom Skills</h3>
+        <p>Extend your agent with any script or prompt.</p>
+        <div class="skill-list">
+          <div class="skill-item"><span class="skill-dot" style="background:var(--text-3)"></span>Shell scripts <span class="sub">— run.sh / run.cmd</span></div>
+          <div class="skill-item"><span class="skill-dot" style="background:var(--text-3)"></span>JSON input/output <span class="sub">— structured data flow</span></div>
+          <div class="skill-item"><span class="skill-dot" style="background:var(--text-3)"></span>Prompt-only skills <span class="sub">— inject system context</span></div>
+          <div class="skill-item"><span class="skill-dot" style="background:var(--text-3)"></span>Custom input schema <span class="sub">— typed parameters</span></div>
+        </div>
+        <div class="custom-highlight">
+          <p>Write a <code>run.sh</code>, define inputs, and your agent gets a new tool. Connect any API, query any database, automate anything — with zero framework code.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Philosophy -->
+<section id="philosophy">
+  <div class="container">
+    <div class="philosophy">
+      <div class="section-label">Philosophy</div>
+      <blockquote>"Running your own AI agent should be as normal as running your own <em>Wi-Fi router</em>."</blockquote>
+      <p>Not a luxury. Not a subscription. Just something you set up once and it works for you. One Node.js process, on a machine you already own. Your agent, your data, your rules.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Download -->
+<section class="download-section" id="download">
+  <div class="container">
+    <div class="section-label">Get started</div>
+    <div class="section-title">Download Agent Salad</div>
+    <p class="dl-sub">Free and open source. Runs on your machine.</p>
+    <div class="dl-buttons">
+      <a href="https://github.com/qwibitai/agentsalad/releases/latest" class="btn btn-dl" id="dl-mac">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        macOS
+      </a>
+      <a href="https://github.com/qwibitai/agentsalad/releases/latest" class="btn btn-dl" id="dl-win">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+        Windows
+      </a>
+      <a href="https://github.com/qwibitai/agentsalad/releases/latest" class="btn btn-dl" id="dl-linux">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.368 1.884 1.43.868.07 1.723-.26 2.456-.594.733-.34 1.395-.668 1.882-.667.665.003 1.025-.23 1.126-.492.1-.26-.03-.6-.313-.832-.56-.468-1.275-.564-1.122-1.202a.076.076 0 00.039-.128c.32-.642.089-1.534-.124-2.341-.263-1.063-.722-2.116-1.07-2.824-.348-.702-.625-1.456-.835-2.212-.21-.749-.353-1.505-.378-2.208-.012-.26-.008-.479.017-.627a.346.346 0 00.002-.107c-.147-3.466-3.197-6.327-7.018-6.327z"/></svg>
+        Linux
+      </a>
+    </div>
+    <p class="dl-note">Or build from source: <a href="https://github.com/qwibitai/agentsalad" target="_blank">github.com/qwibitai/agentsalad</a></p>
+  </div>
+</section>
+
+<!-- Origin -->
+<section style="padding:48px 0">
+  <div class="container">
+    <div style="max-width:520px;margin:0 auto;text-align:center">
+      <p style="font-size:15px;color:var(--text-2);line-height:1.8">
+        <a href="https://openclaw.im/" target="_blank" style="color:var(--green);font-weight:700;text-decoration:none">OpenClaw</a> was hardcore.<br>
+        And I was broke.<br><br>
+        <span style="color:var(--text);font-weight:600">So I built something that just works.</span>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <p>Agent Salad · Made by <a href="https://github.com/qwibitai" target="_blank">qwibitai</a> · <a href="https://github.com/qwibitai/agentsalad" target="_blank">Source</a></p>
+  </div>
+</footer>
+
+<script>
+// Auto-detect OS for hero download button
+(function(){
+  const btn = document.getElementById('hero-dl-btn');
+  const ua = navigator.userAgent;
+  if (/Mac/i.test(ua)) btn.textContent = 'Download for Mac';
+  else if (/Win/i.test(ua)) btn.textContent = 'Download for Windows';
+  else if (/Linux/i.test(ua)) btn.textContent = 'Download for Linux';
+})();
+</script>
+
+</body>
+</html>
