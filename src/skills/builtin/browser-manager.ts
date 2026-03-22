@@ -57,7 +57,7 @@ class BrowserManager {
     if (this.isCdpMode) {
       // CDP: 기존 브라우저의 default context에서 새 탭 열기
       const contexts = browser.contexts();
-      context = contexts[0] ?? await browser.newContext();
+      context = contexts[0] ?? (await browser.newContext());
       page = await context.newPage();
     } else {
       context = await browser.newContext({
@@ -189,7 +189,10 @@ class BrowserManager {
 
   private startCleanup(): void {
     if (this.cleanupTimer) return;
-    this.cleanupTimer = setInterval(() => this.runCleanup(), CLEANUP_INTERVAL_MS);
+    this.cleanupTimer = setInterval(
+      () => this.runCleanup(),
+      CLEANUP_INTERVAL_MS,
+    );
     // unref: cleanup timer가 프로세스 종료를 막지 않도록
     this.cleanupTimer.unref();
   }

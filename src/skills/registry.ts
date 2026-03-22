@@ -4,6 +4,9 @@
  * 에이전트의 스킬 토글과 커스텀 스킬 할당을 읽어
  * 실제 AI SDK tools + 시스템 프롬프트 조각으로 변환.
  *
+ * 워크스페이스 3-depth: ctxOverrides에 channelId + targetName이 있으면
+ * store/workspaces/<agent>/<channel>/<target>/ 경로를 사용.
+ *
  * Smart Step (agent.smart_step === 1) 활성 시 submit_plan + send_message
  * 도구를 추가 등록. 기존 빌트인 스킬과 분리된 에이전트 레벨 옵션.
  *
@@ -82,12 +85,14 @@ export async function resolveSkills(
   const toggles = agent.skills;
 
   const agentWsPath = getWorkspacePath(agent.id);
+  const channelId = ctxOverrides?.channelId;
   const targetName = ctxOverrides?.targetName;
 
-  // 타겟이 있으면 타겟별 서브폴더를 워크스페이스로 사용
-  const workspacePath = targetName
-    ? ensureTargetWorkspace(agent.id, targetName)
-    : ensureWorkspace(agent.id);
+  // 채널+타겟이 있으면 채널→타겟 서브폴더를 워크스페이스로 사용
+  const workspacePath =
+    channelId && targetName
+      ? ensureTargetWorkspace(agent.id, channelId, targetName)
+      : ensureWorkspace(agent.id);
 
   const ctx: SkillContext = {
     workspacePath,

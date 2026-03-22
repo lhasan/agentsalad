@@ -2,7 +2,10 @@
  * Agent Salad - Database Layer
  *
  * 단일 SQLite DB (store/messages.db)로 모든 상태 관리.
- * Agent + Channel + Target = Service 모델. 이것이 유일한 관계 모델이다.
+ * Agent + Channel + Target = Service 모델. Target은 user(DM) 또는 room(채널/스레드).
+ * 멀티채널: Telegram/Discord/Slack. managed_channels.type + auto_session 플래그.
+ * targets.target_type: 'user'(DM 대상) / 'room'(채널/스레드 대상) 구분.
+ * findActiveServiceByRoom(): room 타겟 매칭 (서버 채널 내 메시지 → 방 타겟 서비스).
  * 서비스 크론: cron_jobs + service_crons 테이블로 예약 작업 지원.
  * 커스텀 스킬: custom_skills + agent_custom_skills로 스크립트 기반 스킬 관리.
  * 스마트 스텝: agent_profiles.smart_step/max_plan_steps + hasNewUserMessages() 인터럽트 감지.
@@ -15,6 +18,8 @@ import { STORE_DIR } from './config.js';
 import { logger } from './logger.js';
 import {
   AgentProfile,
+  type ChannelType,
+  type TargetType,
   ConversationMessage,
   CronJob,
   CustomSkill,
@@ -218,6 +223,7 @@ function createSchema(database: Database.Database): void {
   // folder_name: 이름 기반 폴더 명명
   safeAlter(`ALTER TABLE agent_profiles ADD COLUMN folder_name TEXT`);
   safeAlter(`ALTER TABLE custom_skills ADD COLUMN folder_name TEXT`);
+  safeAlter(`ALTER TABLE managed_channels ADD COLUMN folder_name TEXT`);
 
   // time_aware: 시간 인지 모드 (타임스탬프 포함 + 현재 시간 시스템 프롬프트)
   safeAlter(
@@ -230,6 +236,16 @@ function createSchema(database: Database.Database): void {
   );
   safeAlter(
     `ALTER TABLE agent_profiles ADD COLUMN max_plan_steps INTEGER NOT NULL DEFAULT 10`,
+  );
+
+  // target_type: 'user'(DM 대상) / 'room'(채널/스레드 대상)
+  safeAlter(
+    `ALTER TABLE targets ADD COLUMN target_type TEXT NOT NULL DEFAULT 'user'`,
+  );
+
+  // auto_session: 미등록 유저/방 자동 세션 생성 (Discord/Slack용)
+  safeAlter(
+    `ALTER TABLE managed_channels ADD COLUMN auto_session INTEGER NOT NULL DEFAULT 0`,
   );
 
   // thumbnail: 카테고리별 재료 이모지 (랜덤 배정)
@@ -669,42 +685,45 @@ export function upsertLlmProvider(input: {
 }
 
 // ============================================================
-// Managed channels (Telegram bots)
+// Managed channels (Telegram / Discord / Slack bots)
 // ============================================================
+
+const MC_COLUMNS =
+  'id, type, name, config_json, status, pairing_status, folder_name, auto_session, thumbnail, created_at, updated_at';
 
 export function listManagedChannels(): ManagedChannel[] {
   return db
     .prepare(
-      `SELECT id, type, name, config_json, status, pairing_status, thumbnail, created_at, updated_at FROM managed_channels ORDER BY created_at DESC`,
+      `SELECT ${MC_COLUMNS} FROM managed_channels ORDER BY created_at DESC`,
     )
     .all() as ManagedChannel[];
 }
 
 export function getManagedChannelById(id: string): ManagedChannel | undefined {
   return db
-    .prepare(
-      `SELECT id, type, name, config_json, status, pairing_status, thumbnail, created_at, updated_at FROM managed_channels WHERE id = ?`,
-    )
+    .prepare(`SELECT ${MC_COLUMNS} FROM managed_channels WHERE id = ?`)
     .get(id) as ManagedChannel | undefined;
 }
 
 export function createManagedChannel(input: {
   id: string;
-  type: 'telegram';
+  type: ChannelType;
   name: string;
   configJson: string;
   status?: string;
+  folderName?: string;
   thumbnail?: string;
 }): void {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO managed_channels (id, type, name, config_json, status, pairing_status, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+    `INSERT INTO managed_channels (id, type, name, config_json, status, pairing_status, folder_name, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.type,
     input.name,
     input.configJson,
     input.status || 'configured',
+    input.folderName ?? null,
     input.thumbnail ?? null,
     now,
     now,
@@ -718,6 +737,8 @@ export function updateManagedChannel(
     status?: string;
     pairingStatus?: string;
     name?: string;
+    folderName?: string;
+    autoSession?: number;
   },
 ): void {
   const fields: string[] = [];
@@ -737,6 +758,14 @@ export function updateManagedChannel(
   if (updates.name !== undefined) {
     fields.push('name = ?');
     values.push(updates.name);
+  }
+  if (updates.folderName !== undefined) {
+    fields.push('folder_name = ?');
+    values.push(updates.folderName);
+  }
+  if (updates.autoSession !== undefined) {
+    fields.push('auto_session = ?');
+    values.push(updates.autoSession);
   }
   if (fields.length === 0) return;
   fields.push('updated_at = ?');
@@ -783,10 +812,13 @@ export function deleteManagedChannel(id: string): void {
 // Targets (users to serve)
 // ============================================================
 
+const TG_COLUMNS =
+  'id, target_id, nickname, platform, target_type, thumbnail, created_at, updated_at';
+
 export function listTargets(): TargetProfile[] {
   return db
     .prepare(
-      `SELECT id, target_id, nickname, platform, thumbnail, created_at, updated_at FROM targets ORDER BY created_at DESC`,
+      `SELECT ${TG_COLUMNS} FROM targets ORDER BY created_at DESC`,
     )
     .all() as TargetProfile[];
 }
@@ -794,7 +826,7 @@ export function listTargets(): TargetProfile[] {
 export function getTargetById(id: string): TargetProfile | undefined {
   return db
     .prepare(
-      `SELECT id, target_id, nickname, platform, thumbnail, created_at, updated_at FROM targets WHERE id = ?`,
+      `SELECT ${TG_COLUMNS} FROM targets WHERE id = ?`,
     )
     .get(id) as TargetProfile | undefined;
 }
@@ -804,7 +836,7 @@ export function getTargetByTargetId(
 ): TargetProfile | undefined {
   return db
     .prepare(
-      `SELECT id, target_id, nickname, platform, thumbnail, created_at, updated_at FROM targets WHERE target_id = ?`,
+      `SELECT ${TG_COLUMNS} FROM targets WHERE target_id = ?`,
     )
     .get(targetId) as TargetProfile | undefined;
 }
@@ -813,17 +845,28 @@ export function createTarget(input: {
   id: string;
   targetId: string;
   nickname: string;
-  platform: 'telegram';
+  platform: ChannelType;
+  targetType?: TargetType;
   thumbnail?: string;
 }): void {
+  const dup = db
+    .prepare(
+      `SELECT id FROM targets WHERE platform = ? AND nickname = ?`,
+    )
+    .get(input.platform, input.nickname) as { id: string } | undefined;
+  if (dup)
+    throw new Error(
+      `같은 플랫폼(${input.platform})에 동일한 닉네임이 이미 존재합니다: ${input.nickname}`,
+    );
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO targets (id, target_id, nickname, platform, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO targets (id, target_id, nickname, platform, target_type, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.targetId,
     input.nickname,
     input.platform,
+    input.targetType ?? 'user',
     input.thumbnail ?? null,
     now,
     now,
@@ -832,8 +875,31 @@ export function createTarget(input: {
 
 export function updateTarget(
   id: string,
-  updates: { targetId?: string; nickname?: string; platform?: 'telegram' },
+  updates: {
+    targetId?: string;
+    nickname?: string;
+    platform?: ChannelType;
+    targetType?: TargetType;
+  },
 ): void {
+  // 닉네임 또는 플랫폼 변경 시 중복 체크
+  if (updates.nickname !== undefined || updates.platform !== undefined) {
+    const current = getTargetById(id);
+    if (current) {
+      const finalNick = updates.nickname ?? current.nickname;
+      const finalPlat = updates.platform ?? current.platform;
+      const dup = db
+        .prepare(
+          `SELECT id FROM targets WHERE platform = ? AND nickname = ? AND id != ?`,
+        )
+        .get(finalPlat, finalNick, id) as { id: string } | undefined;
+      if (dup)
+        throw new Error(
+          `같은 플랫폼(${finalPlat})에 동일한 닉네임이 이미 존재합니다: ${finalNick}`,
+        );
+    }
+  }
+
   const fields: string[] = [];
   const values: unknown[] = [];
   if (updates.targetId !== undefined) {
@@ -847,6 +913,10 @@ export function updateTarget(
   if (updates.platform !== undefined) {
     fields.push('platform = ?');
     values.push(updates.platform);
+  }
+  if (updates.targetType !== undefined) {
+    fields.push('target_type = ?');
+    values.push(updates.targetType);
   }
   if (fields.length === 0) return;
   fields.push('updated_at = ?');
@@ -918,6 +988,50 @@ export function findActiveService(
   const provider = getLlmProviderById(agent.provider_id);
   if (!provider) return undefined;
   return { ...row, agent, provider };
+}
+
+/**
+ * room 타겟 매칭: 서버 채널 내 메시지 → target_type='room'인 타겟과 매칭.
+ * channel_id + target.target_id(=roomId) + target_type='room' + status='active'
+ */
+export function findActiveServiceByRoom(
+  channelId: string,
+  roomId: string,
+): (Service & { agent: AgentProfile; provider: LlmProvider }) | undefined {
+  const row = db
+    .prepare(
+      `SELECT s.id, s.agent_profile_id, s.channel_id, s.target_id, s.status, s.created_at, s.updated_at
+       FROM services s
+       JOIN targets t ON s.target_id = t.id
+       WHERE s.channel_id = ? AND t.target_id = ? AND t.target_type = 'room' AND s.status = 'active'
+       LIMIT 1`,
+    )
+    .get(channelId, roomId) as Service | undefined;
+  if (!row) return undefined;
+  const agent = getAgentProfileById(row.agent_profile_id);
+  if (!agent) return undefined;
+  const provider = getLlmProviderById(agent.provider_id);
+  if (!provider) return undefined;
+  return { ...row, agent, provider };
+}
+
+/**
+ * 특정 채널에서 에이전트가 1개뿐인지 확인 (자동 세션 생성 시 사용).
+ * 에이전트가 1개면 해당 에이전트 반환, 아니면 undefined.
+ */
+export function findSingleAgentForChannel(
+  channelId: string,
+): AgentProfile | undefined {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT s.agent_profile_id FROM services s WHERE s.channel_id = ? AND s.status = 'active'`,
+    )
+    .all(channelId) as Array<{ agent_profile_id: string }>;
+  if (rows.length === 1) return getAgentProfileById(rows[0].agent_profile_id);
+
+  // 서비스가 없으면 채널에 연결된 에이전트를 찾을 수 없지만,
+  // 기존 서비스가 하나라도 있으면 그 에이전트를 기준으로 자동 생성 가능
+  return undefined;
 }
 
 export function getActiveServicesByChannel(
@@ -1310,7 +1424,18 @@ export function getCronJobById(id: string): CronJob | undefined {
     .get(id) as CronJob | undefined;
 }
 
-const CRON_THUMBS = ['🌶️', '🧂', '🫚', '🍯', '🫘', '🥫', '🥣', '🍶', '🧈', '🥄'];
+const CRON_THUMBS = [
+  '🌶️',
+  '🧂',
+  '🫚',
+  '🍯',
+  '🫘',
+  '🥫',
+  '🥣',
+  '🍶',
+  '🧈',
+  '🥄',
+];
 
 export function createCronJob(input: {
   id: string;
@@ -1324,7 +1449,8 @@ export function createCronJob(input: {
 }): void {
   const now = new Date().toISOString();
   const thumb =
-    input.thumbnail || CRON_THUMBS[Math.floor(Math.random() * CRON_THUMBS.length)];
+    input.thumbnail ||
+    CRON_THUMBS[Math.floor(Math.random() * CRON_THUMBS.length)];
   db.prepare(
     `INSERT INTO cron_jobs (id, name, prompt, skill_hint, schedule_type, schedule_time, notify, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(

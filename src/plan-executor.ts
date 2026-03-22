@@ -25,10 +25,7 @@ import { join } from 'path';
 import type { PlanFile } from './skills/builtin/submit-plan.js';
 import { hasNewUserMessages } from './db.js';
 import { logger } from './logger.js';
-import {
-  getWorkspacePath,
-  getTargetWorkspacePath,
-} from './skills/workspace.js';
+import { getWorkspacePath } from './skills/workspace.js';
 
 const COOLDOWN_MS = 3000;
 

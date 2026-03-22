@@ -6,7 +6,7 @@ See [docs/SERVICE_PLATFORM.md](docs/SERVICE_PLATFORM.md) for full architecture. 
 
 ## Quick Context
 
-**Agent + Channel + Target = Service.** A single Node.js process manages multiple concurrent services. Each service binds one AI agent (any LLM provider) to one messenger channel (Telegram) for one target user. Direct API calls via Vercel AI SDK — no proxy, no containers for chat.
+**Agent + Channel + Target = Service.** A single Node.js process manages multiple concurrent services. Each service binds one AI agent (any LLM provider) to one messenger channel (Telegram, Discord, or Slack) for one target (user or room). Target can be a user (DM) or a room (channel/thread). Discord/Slack support auto-session: `auto_session=1` channels auto-create Target+Service on first interaction. Direct API calls via Vercel AI SDK — no proxy, no containers for chat.
 
 Auto-compaction (Claude SDK pattern): when conversation context exceeds 75% of the provider's context window, the engine archives the full history, asks the same LLM to summarize, and replaces all messages with the summary. Recursive — if summary + new messages overflow again, re-summarizes.
 
@@ -25,15 +25,18 @@ Auto-compaction (Claude SDK pattern): when conversation context exceeds 75% of t
 | `src/providers/groq.ts` | Groq provider adapter |
 | `src/providers/openrouter.ts` | OpenRouter provider adapter |
 | `src/providers/opencode.ts` | OpenCode provider adapter |
+| `src/channels/factory.ts` | Channel factory: createChannelByType() — Telegram/Discord/Slack 분기 |
 | `src/channels/telegram.ts` | Telegram channel (grammY) |
+| `src/channels/discord.ts` | Discord channel (discord.js, Gateway WebSocket, DM) |
+| `src/channels/slack.ts` | Slack channel (@slack/bolt, Socket Mode, DM) |
 | `src/plan-executor.ts` | Smart Step plan execution engine (batch loop, interrupt check, crash recovery) |
 | `src/web-ui.ts` | Admin dashboard: 3 tabs (Agent Services / Agents / Skills), i18n, light theme |
 | `src/db.ts` | SQLite: services, conversations, archives, providers, custom_skills, cron_jobs, service_crons |
-| `src/types.ts` | Type definitions (AgentSkillToggles, CustomSkill, CronJob, ServiceCron, Service, etc.) |
+| `src/types.ts` | Type definitions (ChannelType, AgentSkillToggles, CustomSkill, CronJob, ServiceCron, Service, etc.) |
 | `src/skills/types.ts` | BuiltinSkill, SkillContext, ResolvedSkills interfaces |
 | `src/skills/registry.ts` | resolveSkills(agent, customSkills) → tools + skillPrompts (prompt.txt file-first) |
 | `src/skills/custom-executor.ts` | Custom skill executor (file-based + inline fallback, stdin JSON + env vars) |
-| `src/skills/workspace.ts` | Agent workspace management (multi-target subfolders, _shared/ shared folder, name-based folders, rename tracking) |
+| `src/skills/workspace.ts` | Agent workspace management (3-depth: agent/channel/target, _shared/ at agent root, name-based folders, rename tracking) |
 | `src/skills/builtin/index.ts` | All 10 builtin skills registered |
 | `src/skills/builtin/file-read.ts` | read_file tool (workspace scoped) |
 | `src/skills/builtin/file-write.ts` | write_file tool (workspace scoped) |
@@ -63,11 +66,13 @@ Auto-compaction (Claude SDK pattern): when conversation context exceeds 75% of t
 ## Architecture
 
 ```
-User ──▶ Messenger ──▶ Channel (Telegram)
+User ──▶ Messenger ──▶ Channel (Telegram/Discord/Slack)
                               │
                               ▼
                      Service Router
-                     ├─ Find active service (channel_id + target_id)
+                     ├─ DM → findActiveService(channelId, userId)
+                     ├─ Channel msg → findActiveServiceByRoom(channelId, roomId)
+                     ├─ No match + auto_session → tryAutoCreateSession()
                      ├─ Auto-compact if context > 75% window
                      ├─ Build context (summary + recent messages)
                      ├─ resolveSkills(agent) → tools + skillPrompts
@@ -87,7 +92,7 @@ User ──▶ Messenger ──▶ Channel (Telegram)
                            browse)
                               │
                               ▼
-                     Response ──▶ Channel ──▶ User
+                     Response ──▶ Channel ──▶ User (DM) or Room (channel)
 
  Cron Scheduler (30s loop)
  ├─ getDueServiceCrons()

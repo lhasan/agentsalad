@@ -1,12 +1,13 @@
 /**
- * Agent Salad - Admin Dashboard
+ * Agent Salad — Admin Dashboard
  *
  * 단일 페이지 UI (라이트 테마 + 샐러드 메타포 + 4개국어 i18n)
- * My Salads 탭: 서비스 카드(🥗/🍽️ 상태 표시) + 크론 영역 + 3열 블록 그리드 (에이전트/채널/대상)
+ * My Salads 탭: 서비스 카드 + 크론 영역 + 3열 블록 그리드 (에이전트/채널/대상)
  * Agents 탭: 에이전트 상세 설정 (스킬, 프롬프트)
  * Skills 탭: 기본/커스텀 스킬 카탈로그
- * 추가(+Add) → 모달 방식 (에이전트 생성 시 스킬 설정 포함)
- * 타겟→대상 용어 통일, 블록 헤더 이모지 제거, 크론은 내 샐러드 아래 독립 영역
+ *
+ * 멀티채널: Telegram/Discord/Slack 페어링 API 지원 (채널 타입별 분기).
+ * WebUiContext에 pairDiscordBot, pairSlackBot 추가.
  */
 import http from 'http';
 import { URL } from 'url';
@@ -15,6 +16,7 @@ import { logger } from './logger.js';
 import type {
   AgentProfile,
   AgentSkillToggles,
+  ChannelType,
   CronJob,
   CustomSkill,
   LlmProvider,
@@ -45,15 +47,27 @@ export interface WebUiContext {
   setProviderApiKey: (providerId: string, apiKey: string) => void;
   listManagedChannels: () => ManagedChannel[];
   createManagedChannel: (input: {
-    type: 'telegram';
+    type: ChannelType;
     name: string;
     config: Record<string, string>;
   }) => string;
-  updateManagedChannel: (id: string, updates: { name?: string }) => void;
+  updateManagedChannel: (
+    id: string,
+    updates: { name?: string; autoSession?: number },
+  ) => void;
   deleteManagedChannel: (id: string) => void;
   pairTelegramBot: (
     channelId: string,
     botToken: string,
+  ) => Promise<{ success: boolean; error?: string; botUsername?: string }>;
+  pairDiscordBot: (
+    channelId: string,
+    botToken: string,
+  ) => Promise<{ success: boolean; error?: string; botUsername?: string }>;
+  pairSlackBot: (
+    channelId: string,
+    botToken: string,
+    appToken: string,
   ) => Promise<{ success: boolean; error?: string; botUsername?: string }>;
   updateChannelPairing: (id: string, status: string, config?: string) => void;
   connectChannel: (channelId: string) => Promise<void>;
@@ -61,11 +75,17 @@ export interface WebUiContext {
   createTarget: (input: {
     targetId: string;
     nickname: string;
-    platform: 'telegram';
+    platform: ChannelType;
+    targetType?: 'user' | 'room';
   }) => string;
   updateTarget: (
     id: string,
-    updates: { targetId?: string; nickname?: string; platform?: 'telegram' },
+    updates: {
+      targetId?: string;
+      nickname?: string;
+      platform?: ChannelType;
+      targetType?: 'user' | 'room';
+    },
   ) => void;
   deleteTarget: (id: string) => void;
   listServices: () => Service[];
@@ -510,7 +530,7 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 <!-- ACTIVE SERVICES -->
 <div class="svc-area">
   <div class="sec-label" id="secActive">My Salads</div>
-  <div class="sec-desc" style="color:var(--t3);font-size:0.9em;margin:-4px 0 8px 0"><span id="secSaladDesc">Complete a salad and chat with your own agent!</span> &nbsp;<a href="#" id="useCaseLink" onclick="event.preventDefault();$('useCaseModal').classList.add('show')" style="color:var(--indigo);text-decoration:underline;cursor:pointer;font-size:1em">🥕Try it like this</a></div>
+  <div class="sec-desc" style="color:var(--t3);font-size:.82em;margin:4px 0 8px 0"><span id="secSaladDesc">Complete a salad and chat with your own agent!</span> &nbsp;<a href="#" id="useCaseLink" onclick="event.preventDefault();$('useCaseModal').classList.add('show')" style="color:var(--indigo);text-decoration:underline;cursor:pointer;font-size:1em">🥕Try it like this</a></div>
   <div id="svcList"></div>
 </div>
 
@@ -739,7 +759,7 @@ en:{
   nameRequired:'Name is required',toolNameRequired:'Please enter Tool Name',
   toolNameFormat:'Tool Name must be lowercase letters and underscores only',
   nameAndPromptRequired:'Name and Prompt required',dateTimeRequired:'Date & Time required',
-  pairingFailed:'Pairing failed: ',failedCreateChannel:'Failed to create channel',
+  pairingFailed:'Pairing failed: ',failedCreateChannel:'Failed to create channel',typeMismatch:'Channel and target platform must match',
   unknownProvider:'Unknown provider',apiKeyNotSet:'API key not set',notPaired:'Not paired',
   newCustomSkill:'New Custom Skill',editCustomSkill:'Edit Custom Skill',
   deleteCustomSkill:'Delete this custom skill?',
@@ -793,10 +813,40 @@ en:{
   phSystemPrompt:'Write personality, role, goals freely...',
   agentSkillsHint:'Select tools the agent can use. Files, web, terminal, etc.',
   channelNameHint:'Give this channel a name to identify it.',phChannelName:'e.g. My Telegram Bot',
+  channelTypeHint:'Select the messenger platform for this channel.',
   botTokenHint:'Create a bot with <a href="https://t.me/BotFather" target="_blank">@BotFather</a> on Telegram and paste the token here.',
+  botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li>Go to <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → name it → Create</li>'
+    +'<li>Left menu → <b>Bot</b> → click <b>Reset Token</b> → <b>Copy</b> the token</li>'
+    +'<li>Scroll down to <b>Privileged Gateway Intents</b> → turn on <b>MESSAGE CONTENT INTENT</b> and <b>SERVER MEMBERS INTENT</b> → Save</li>'
+    +'<li>Left menu → <b>OAuth2</b> → <b>URL Generator</b></li>'
+    +'<li>Scopes: check <b>bot</b> · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
+    +'<li>Copy the generated URL → open in browser → select your server → Authorize</li>'
+    +'</ol>',
+  botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li>Go to <a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → name it, select workspace → Create</li>'
+    +'<li>Left menu → <b>OAuth &amp; Permissions</b> → scroll to <b>Bot Token Scopes</b> → add: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
+    +'<li>Scroll up → <b>Install to Workspace</b> → Allow</li>'
+    +'<li>Copy the <b>Bot User OAuth Token</b> (starts with <code>xoxb-</code>)</li>'
+    +'<li>Left menu → <b>Event Subscriptions</b> → Enable Events → Add bot events: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'</ol>',
+  appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li>Left menu → <b>Socket Mode</b> → turn on <b>Enable Socket Mode</b></li>'
+    +'<li>A dialog appears → name the token (e.g. "socket") → add scope <code>connections:write</code> → <b>Generate</b></li>'
+    +'<li>Copy the token (starts with <code>xapp-</code>)</li>'
+    +'<li><i>Or: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'</ol>',
+  appToken:'App-Level Token',
   platformSelectHint:'Select the messaging platform.',
   platformUserIdHint:'Send a message to <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> on Telegram to find your numeric user ID.',phPlatformUserId:'e.g. 123456789',
+  platformUserIdHintDiscord:'Discord → Settings → Advanced → turn on <b>Developer Mode</b>. Then right-click a user → <b>Copy User ID</b> (a long number like <code>284102390284</code>).',
+  platformUserIdHintSlack:'Click a user\\'s name in Slack → <b>View full profile</b> → click <b>⋮</b> (more) → <b>Copy member ID</b> (like <code>U04ABCDEF</code>).',
   nicknameHint:'A friendly name to recognize this person.',phNickname:'e.g. John',
+  targetType:'Target Type',targetTypeHint:'User = DM target, Room = channel/thread target.',
+  targetTypeUser:'User (DM)',targetTypeRoom:'Room (Channel)',
+  roomId:'Channel/Room ID',roomIdHint:'Copy the channel ID from Discord (Developer Mode) or Slack (Channel Details → bottom).',
+  autoSession:'Auto Session',autoSessionHint:'Automatically create sessions when new users/rooms interact with the bot.',
+  autoSessionBadge:'Auto',
   cronPromptHint:'Tell the agent what to do at the set time. e.g. "Summarize today\\'s top news"',
   phCronName:'Daily news summary',phCronPrompt:'Instructions to send to agent...',
   cronSkillsHint:'Select tools the agent should use for this schedule. Leave empty if none needed.',
@@ -896,7 +946,7 @@ ko:{
   nameRequired:'이름을 입력하세요',toolNameRequired:'도구 이름을 입력하세요',
   toolNameFormat:'도구 이름은 영문 소문자와 언더스코어만 가능합니다',
   nameAndPromptRequired:'이름과 프롬프트를 입력하세요',dateTimeRequired:'날짜와 시간을 입력하세요',
-  pairingFailed:'페어링 실패: ',failedCreateChannel:'채널 생성 실패',
+  pairingFailed:'페어링 실패: ',failedCreateChannel:'채널 생성 실패',typeMismatch:'채널과 대상의 플랫폼이 일치해야 합니다',
   unknownProvider:'알 수 없는 프로바이더',apiKeyNotSet:'API 키 미설정',notPaired:'페어링 안됨',
   newCustomSkill:'새 커스텀 스킬',editCustomSkill:'커스텀 스킬 편집',
   deleteCustomSkill:'이 커스텀 스킬을 삭제하시겠습니까?',
@@ -947,10 +997,40 @@ ko:{
   phSystemPrompt:'성격, 역할, 목표를 자유롭게 적어주세요...',
   agentSkillsHint:'에이전트가 사용할 수 있는 도구를 선택하세요. 파일, 웹, 터미널 등을 허용할 수 있습니다.',
   channelNameHint:'이 채널을 구분할 이름을 지어주세요.',phChannelName:'예: 내 텔레그램 봇',
+  channelTypeHint:'이 채널에 사용할 메신저 플랫폼을 선택하세요.',
   botTokenHint:'Telegram에서 <a href="https://t.me/BotFather" target="_blank">@BotFather</a>로 봇을 만들고, 받은 토큰을 붙여넣으세요.',
+  botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 이름 입력 → Create</li>'
+    +'<li>왼쪽 메뉴 → <b>Bot</b> → <b>Reset Token</b> 클릭 → 토큰 <b>복사</b></li>'
+    +'<li>아래로 스크롤 → <b>Privileged Gateway Intents</b> → <b>MESSAGE CONTENT INTENT</b>와 <b>SERVER MEMBERS INTENT</b> 켜기 → Save</li>'
+    +'<li>왼쪽 메뉴 → <b>OAuth2</b> → <b>URL Generator</b></li>'
+    +'<li>Scopes: <b>bot</b> 체크 · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
+    +'<li>생성된 URL 복사 → 브라우저에서 열기 → 서버 선택 → Authorize (봇 초대 완료)</li>'
+    +'</ol>',
+  botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → 이름 입력, 워크스페이스 선택 → Create</li>'
+    +'<li>왼쪽 메뉴 → <b>OAuth &amp; Permissions</b> → <b>Bot Token Scopes</b>에 추가: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
+    +'<li>위로 스크롤 → <b>Install to Workspace</b> → Allow</li>'
+    +'<li><b>Bot User OAuth Token</b> 복사 (<code>xoxb-</code>로 시작)</li>'
+    +'<li>왼쪽 메뉴 → <b>Event Subscriptions</b> → Enable Events → 봇 이벤트 추가: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'</ol>',
+  appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li>왼쪽 메뉴 → <b>Socket Mode</b> → <b>Enable Socket Mode</b> 켜기</li>'
+    +'<li>다이얼로그에서 토큰 이름 입력 (예: "socket") → 스코프 <code>connections:write</code> 추가 → <b>Generate</b></li>'
+    +'<li>토큰 복사 (<code>xapp-</code>로 시작)</li>'
+    +'<li><i>또는: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'</ol>',
+  appToken:'앱 레벨 토큰',
   platformSelectHint:'메시지를 전달할 플랫폼을 선택하세요.',
   platformUserIdHint:'Telegram에서 <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>에게 메시지를 보내면 숫자 ID를 확인할 수 있습니다.',phPlatformUserId:'예: 123456789',
+  platformUserIdHintDiscord:'Discord → 설정 → 고급 → <b>개발자 모드</b> 켜기. 유저 우클릭 → <b>사용자 ID 복사</b> (<code>284102390284</code> 같은 긴 숫자).',
+  platformUserIdHintSlack:'Slack에서 유저 이름 클릭 → <b>전체 프로필 보기</b> → <b>⋮</b> (더 보기) → <b>멤버 ID 복사</b> (<code>U04ABCDEF</code> 형태).',
   nicknameHint:'누구인지 알아볼 수 있는 별명을 적어주세요.',phNickname:'예: 태형이',
+  targetType:'타겟 유형',targetTypeHint:'유저 = DM 대상, 방 = 채널/스레드 대상.',
+  targetTypeUser:'유저 (DM)',targetTypeRoom:'방 (채널)',
+  roomId:'채널/방 ID',roomIdHint:'Discord에서 개발자 모드 켜고 채널 우클릭 → ID 복사, Slack에서 채널 상세 → 하단의 채널 ID.',
+  autoSession:'자동 세션',autoSessionHint:'새로운 유저나 방이 봇과 대화하면 자동으로 세션을 생성합니다.',
+  autoSessionBadge:'자동',
   cronPromptHint:'예약된 시간에 에이전트가 무엇을 하길 원하는지 적어주세요. 예: "오늘의 주요 뉴스를 요약해줘"',
   phCronName:'매일 뉴스 요약',phCronPrompt:'에이전트에게 보낼 지시...',
   cronSkillsHint:'예약 활동 시 에이전트가 사용할 도구가 있다면 선택하세요. 없으면 비워둬도 됩니다.',
@@ -1045,7 +1125,7 @@ ja:{
   nameRequired:'名前を入力してください',toolNameRequired:'ツール名を入力してください',
   toolNameFormat:'ツール名は英小文字とアンダースコアのみ',
   nameAndPromptRequired:'名前とプロンプトを入力してください',dateTimeRequired:'日時を入力してください',
-  pairingFailed:'ペアリング失敗: ',failedCreateChannel:'チャンネル作成失敗',
+  pairingFailed:'ペアリング失敗: ',failedCreateChannel:'チャンネル作成失敗',typeMismatch:'チャンネルとターゲットのプラットフォームが一致する必要があります',
   unknownProvider:'不明なプロバイダー',apiKeyNotSet:'APIキー未設定',notPaired:'未ペアリング',
   newCustomSkill:'新規カスタムスキル',editCustomSkill:'カスタムスキル編集',
   deleteCustomSkill:'このカスタムスキルを削除しますか？',
@@ -1096,10 +1176,40 @@ ja:{
   phSystemPrompt:'性格、役割、目標を自由に書いてください...',
   agentSkillsHint:'エージェントが使えるツールを選択してください。ファイル、ウェブ、ターミナルなど。',
   channelNameHint:'このチャンネルを識別する名前を付けてください。',phChannelName:'例: マイTelegramボット',
+  channelTypeHint:'このチャンネルで使うメッセンジャーを選択してください。',
   botTokenHint:'Telegramで<a href="https://t.me/BotFather" target="_blank">@BotFather</a>からボットを作成し、トークンを貼り付けてください。',
+  botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 名前入力 → Create</li>'
+    +'<li>左メニュー → <b>Bot</b> → <b>Reset Token</b> → トークンを<b>コピー</b></li>'
+    +'<li>下にスクロール → <b>Privileged Gateway Intents</b> → <b>MESSAGE CONTENT INTENT</b>と<b>SERVER MEMBERS INTENT</b>をオン → Save</li>'
+    +'<li>左メニュー → <b>OAuth2</b> → <b>URL Generator</b></li>'
+    +'<li>Scopes: <b>bot</b> · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
+    +'<li>生成URLをコピー → ブラウザで開く → サーバー選択 → Authorize（ボット招待完了）</li>'
+    +'</ol>',
+  botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → 名前・ワークスペース選択 → Create</li>'
+    +'<li>左メニュー → <b>OAuth &amp; Permissions</b> → <b>Bot Token Scopes</b>に追加: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
+    +'<li>上にスクロール → <b>Install to Workspace</b> → Allow</li>'
+    +'<li><b>Bot User OAuth Token</b>をコピー（<code>xoxb-</code>で始まる）</li>'
+    +'<li>左メニュー → <b>Event Subscriptions</b> → Enable Events → ボットイベント追加: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'</ol>',
+  appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li>左メニュー → <b>Socket Mode</b> → <b>Enable Socket Mode</b>をオン</li>'
+    +'<li>ダイアログでトークン名入力（例: "socket"）→ スコープ<code>connections:write</code>追加 → <b>Generate</b></li>'
+    +'<li>トークンをコピー（<code>xapp-</code>で始まる）</li>'
+    +'<li><i>または: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'</ol>',
+  appToken:'App-Level Token',
   platformSelectHint:'メッセージを送るプラットフォームを選んでください。',
   platformUserIdHint:'Telegramで<a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>にメッセージを送ると数字IDが分かります。',phPlatformUserId:'例: 123456789',
+  platformUserIdHintDiscord:'Discord → 設定 → 詳細設定 → <b>開発者モード</b>をオン。ユーザーを右クリック → <b>ユーザーIDをコピー</b>（<code>284102390284</code>のような長い数字）。',
+  platformUserIdHintSlack:'Slackでユーザー名をクリック → <b>プロフィール全体を表示</b> → <b>⋮</b> → <b>メンバーIDをコピー</b>（<code>U04ABCDEF</code>形式）。',
   nicknameHint:'この人を識別できるニックネームを付けてください。',phNickname:'例: 太郎',
+  targetType:'ターゲットタイプ',targetTypeHint:'ユーザー = DM対象、ルーム = チャンネル/スレッド対象。',
+  targetTypeUser:'ユーザー (DM)',targetTypeRoom:'ルーム (チャンネル)',
+  roomId:'チャンネル/ルームID',roomIdHint:'Discordで開発者モードをオンにしてチャンネルを右クリック → IDをコピー。Slackでチャンネル詳細 → 下部のチャンネルID。',
+  autoSession:'自動セッション',autoSessionHint:'新しいユーザーやルームがボットと会話すると自動的にセッションを作成します。',
+  autoSessionBadge:'自動',
   cronPromptHint:'予定時間にエージェントに何をさせたいか書いてください。例: 「今日の主要ニュースをまとめて」',
   phCronName:'毎日ニュースまとめ',phCronPrompt:'エージェントへの指示...',
   cronSkillsHint:'スケジュール実行時にエージェントが使うツールがあれば選択してください。なければ空でOKです。',
@@ -1193,7 +1303,7 @@ zh:{
   nameRequired:'请输入名称',toolNameRequired:'请输入工具名称',
   toolNameFormat:'工具名称只能使用英文小写和下划线',
   nameAndPromptRequired:'请输入名称和提示词',dateTimeRequired:'请输入日期和时间',
-  pairingFailed:'配对失败: ',failedCreateChannel:'创建频道失败',
+  pairingFailed:'配对失败: ',failedCreateChannel:'创建频道失败',typeMismatch:'频道和目标的平台必须一致',
   unknownProvider:'未知提供商',apiKeyNotSet:'API密钥未设置',notPaired:'未配对',
   newCustomSkill:'新建自定义技能',editCustomSkill:'编辑自定义技能',
   deleteCustomSkill:'删除此自定义技能？',
@@ -1244,10 +1354,40 @@ zh:{
   phSystemPrompt:'自由描述性格、角色、目标...',
   agentSkillsHint:'选择代理可以使用的工具。文件、网页、终端等。',
   channelNameHint:'给这个频道起一个名字以便识别。',phChannelName:'例: 我的Telegram机器人',
+  channelTypeHint:'选择此频道使用的消息平台。',
   botTokenHint:'在Telegram中通过<a href="https://t.me/BotFather" target="_blank">@BotFather</a>创建机器人并粘贴令牌。',
+  botTokenHintDiscord:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → <b>New Application</b> → 输入名称 → Create</li>'
+    +'<li>左菜单 → <b>Bot</b> → <b>Reset Token</b> → <b>复制</b>令牌</li>'
+    +'<li>向下滚动 → <b>Privileged Gateway Intents</b> → 开启 <b>MESSAGE CONTENT INTENT</b> 和 <b>SERVER MEMBERS INTENT</b> → Save</li>'
+    +'<li>左菜单 → <b>OAuth2</b> → <b>URL Generator</b></li>'
+    +'<li>Scopes: 勾选 <b>bot</b> · Bot Permissions: <b>Send Messages</b>, <b>Read Message History</b>, <b>View Channels</b></li>'
+    +'<li>复制生成的URL → 在浏览器打开 → 选择服务器 → Authorize（机器人邀请完成）</li>'
+    +'</ol>',
+  botTokenHintSlack:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li><a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> → <b>Create New App</b> → <b>From scratch</b> → 输入名称、选择工作区 → Create</li>'
+    +'<li>左菜单 → <b>OAuth &amp; Permissions</b> → <b>Bot Token Scopes</b> 添加: <code>chat:write</code>, <code>im:history</code>, <code>channels:history</code>, <code>app_mentions:read</code>, <code>users:read</code></li>'
+    +'<li>向上滚动 → <b>Install to Workspace</b> → Allow</li>'
+    +'<li>复制 <b>Bot User OAuth Token</b>（以 <code>xoxb-</code> 开头）</li>'
+    +'<li>左菜单 → <b>Event Subscriptions</b> → Enable Events → 添加机器人事件: <code>message.im</code>, <code>message.channels</code>, <code>app_mention</code> → Save</li>'
+    +'</ol>',
+  appTokenHint:'<ol style="margin:4px 0 0 16px;padding:0;font-size:.78rem;line-height:1.5">'
+    +'<li>左菜单 → <b>Socket Mode</b> → 开启 <b>Enable Socket Mode</b></li>'
+    +'<li>弹窗中输入令牌名称（如 "socket"）→ 添加范围 <code>connections:write</code> → <b>Generate</b></li>'
+    +'<li>复制令牌（以 <code>xapp-</code> 开头）</li>'
+    +'<li><i>或: Basic Information → App-Level Tokens → Generate Token and Scopes</i></li>'
+    +'</ol>',
+  appToken:'App-Level Token',
   platformSelectHint:'选择消息平台。',
   platformUserIdHint:'在Telegram中向<a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>发消息可查看数字ID。',phPlatformUserId:'例: 123456789',
+  platformUserIdHintDiscord:'Discord → 设置 → 高级 → 开启<b>开发者模式</b>。右键用户 → <b>复制用户ID</b>（类似 <code>284102390284</code> 的长数字）。',
+  platformUserIdHintSlack:'点击Slack中的用户名 → <b>查看完整资料</b> → <b>⋮</b> → <b>复制成员ID</b>（类似 <code>U04ABCDEF</code>）。',
   nicknameHint:'写一个容易辨认的昵称。',phNickname:'例: 小明',
+  targetType:'目标类型',targetTypeHint:'用户 = DM对象，房间 = 频道/线程对象。',
+  targetTypeUser:'用户 (DM)',targetTypeRoom:'房间 (频道)',
+  roomId:'频道/房间ID',roomIdHint:'在Discord中开启开发者模式后右键频道 → 复制ID。在Slack中频道详情 → 底部的频道ID。',
+  autoSession:'自动会话',autoSessionHint:'新用户或房间与机器人交互时自动创建会话。',
+  autoSessionBadge:'自动',
   cronPromptHint:'告诉代理在预定时间做什么。例: "总结今天的主要新闻"',
   phCronName:'每日新闻摘要',phCronPrompt:'发给代理的指令...',
   cronSkillsHint:'选择定时活动时代理要用的工具。不需要可留空。',
@@ -1384,8 +1524,8 @@ function scrollToComposer(){
 /* ---- DRAG & DROP ---- */
 let dragData=null;
 
-function onDragStart(e,type,id,name,thumb,meta){
-  dragData={type,id,name,thumb:thumb||'',meta:meta||''};
+function onDragStart(e,type,id,name,thumb,meta,platform){
+  dragData={type,id,name,thumb:thumb||'',meta:meta||'',platform:platform||''};
   e.target.classList.add('dragging');
   e.dataTransfer.effectAllowed='all';
   e.dataTransfer.setData('text/plain',id);
@@ -1408,8 +1548,8 @@ document.addEventListener('DOMContentLoaded',()=>{
       document.querySelectorAll('.slot.drop-hint').forEach(s=>s.classList.remove('drop-hint'));
       if(!dragData)return;
       const slotType=el.dataset.type;
-      if(slotType==='agent'&&dragData.type==='agent'){fillSlot('agent',dragData.id,dragData.name,dragData.thumb,dragData.meta)}
-      else if(slotType==='channel'&&dragData.type==='channel'){fillSlot('channel',dragData.id,dragData.name,dragData.thumb,dragData.meta)}
+      if(slotType==='agent'&&dragData.type==='agent'){fillSlot('agent',dragData.id,dragData.name,dragData.thumb,dragData.meta,dragData.platform)}
+      else if(slotType==='channel'&&dragData.type==='channel'){fillSlot('channel',dragData.id,dragData.name,dragData.thumb,dragData.meta,dragData.platform)}
     });
   });
   const tCon=$('slotTContainer');
@@ -1419,12 +1559,15 @@ document.addEventListener('DOMContentLoaded',()=>{
     e.preventDefault();$('slotTEmpty').classList.remove('over','drop-hint');
     document.querySelectorAll('.slot.drop-hint').forEach(s=>s.classList.remove('drop-hint'));
     if(!dragData||dragData.type!=='target')return;
+    if(slots.channel&&slots.channel.platform&&dragData.platform&&slots.channel.platform!==dragData.platform){
+      showAlert(t('typeMismatch'),'⚠️');return;
+    }
     addTarget(dragData.id,dragData.name,dragData.thumb,dragData.meta);
   });
 });
 
-function fillSlot(type,id,name,thumb,meta){
-  slots[type]={id,name};
+function fillSlot(type,id,name,thumb,meta,platform){
+  slots[type]={id,name,platform:platform||''};
   const map={agent:'slotA',channel:'slotC'};
   const el=$(map[type]);
   el.classList.add('filled');
@@ -1437,6 +1580,17 @@ function fillSlot(type,id,name,thumb,meta){
       (meta?'<div class="slot-meta">'+esc(meta)+'</div>':'')+
     '</div>'+
     '<button class="slot-clear" onclick="clearSlot(\\''+type+'\\')">\\u2715</button>';
+  if(type==='channel'){
+    // 채널 교체 시 플랫폼 불일치 타겟 제거
+    if(platform&&slots.targets.length>0){
+      slots.targets=slots.targets.filter(function(tg){
+        var tgObj=D.targets.find(function(x){return x.id===tg.id});
+        return !tgObj||tgObj.platform===platform;
+      });
+      renderTargetSlot();
+    }
+    filterTargetsByPlatform();
+  }
   checkSaveBtn();
 }
 
@@ -1481,18 +1635,39 @@ function clearSlot(type){
     checkSaveBtn();return;
   }
   slots[type]=null;
-  const map={agent:'slotA',channel:'slotC'};
-  const labelMap={agent:'agent',channel:'channel'};
-  const el=$(map[type]);
+  var map={agent:'slotA',channel:'slotC'};
+  var labelMap={agent:'agent',channel:'channel'};
+  var el=$(map[type]);
   el.classList.remove('filled');
   el.classList.add('empty');
   el.innerHTML=
     '<div class="slot-label">'+t(labelMap[type])+'</div>'+
     '<div class="slot-val">'+t('dropHere')+'</div>';
+  if(type==='channel'){
+    filterTargetsByPlatform();
+    // 호환되지 않는 타겟이 이미 추가되어 있으면 제거
+    if(slots.targets.length>0){
+      slots.targets=[];
+      $('slotTEmpty').style.display='';
+      $('slotTList').innerHTML='';
+    }
+  }
   checkSaveBtn();
 }
 
 function clearAllSlots(){clearSlot('agent');clearSlot('channel');clearSlot('target')}
+
+function filterTargetsByPlatform(){
+  var chPlat=slots.channel&&slots.channel.platform?slots.channel.platform:'';
+  document.querySelectorAll('#tgBlocks .blk.tg').forEach(function(el){
+    var tPlat=el.getAttribute('data-platform')||'';
+    if(chPlat&&tPlat&&chPlat!==tPlat){
+      el.style.opacity='0.35';el.style.pointerEvents='none';el.setAttribute('draggable','false');
+    }else{
+      el.style.opacity='';el.style.pointerEvents='';el.setAttribute('draggable','true');
+    }
+  });
+}
 
 function checkSaveBtn(){$('saveSvcBtn').disabled=!(slots.agent&&slots.channel&&slots.targets.length>0)}
 
@@ -1584,12 +1759,28 @@ async function submitAddAgent(){
   closeDetail();load();
 }
 
+function chTypeHintFor(type){
+  if(type==='discord')return t('botTokenHintDiscord');
+  if(type==='slack')return t('botTokenHintSlack');
+  return t('botTokenHint');
+}
+function updateChTypeFields(){
+  var type=$('mChType').value;
+  $('mChTokenHint').innerHTML=chTypeHintFor(type);
+  var slackRow=$('mChAppTokenRow');
+  if(slackRow)slackRow.style.display=type==='slack'?'':'none';
+  var ph=type==='discord'?'MTA5...':'123456:ABC-DEF...';
+  $('mChToken').placeholder=ph;
+}
 function openAddChannelModal(){
-  const panel=$('detailPanel');
+  var panel=$('detailPanel');
   panel.innerHTML=
     '<div class="d-hdr"><h3>'+t('channel')+' '+t('create')+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
+    '<div class="d-field"><label>'+t('platform')+'</label><div class="field-hint">'+t('channelTypeHint')+'</div>'+
+      '<select id="mChType" onchange="updateChTypeFields()"><option value="telegram">Telegram</option><option value="discord">Discord</option><option value="slack">Slack</option></select></div>'+
     '<div class="d-field"><label>'+t('name')+'</label><div class="field-hint">'+t('channelNameHint')+'</div><input id="mChName" placeholder="'+t('phChannelName')+'"></div>'+
-    '<div class="d-field"><label>'+t('botToken')+'</label><div class="field-hint">'+t('botTokenHint')+'</div><input id="mChToken" placeholder="123456:ABC-DEF..." style="font-family:var(--mono);font-size:.72rem"></div>'+
+    '<div class="d-field"><label>'+t('botToken')+'</label><div class="field-hint" id="mChTokenHint">'+t('botTokenHint')+'</div><input id="mChToken" placeholder="123456:ABC-DEF..." style="font-family:var(--mono);font-size:.72rem"></div>'+
+    '<div class="d-field" id="mChAppTokenRow" style="display:none"><label>'+t('appToken')+'</label><div class="field-hint">'+t('appTokenHint')+'</div><input id="mChAppToken" placeholder="xapp-1-..." style="font-family:var(--mono);font-size:.72rem"></div>'+
     '<div class="d-actions">'+
       '<button class="btn btn-p" onclick="submitAddChannel()">'+t('addPair')+'</button>'+
       '<button class="btn btn-g" onclick="closeDetail()">'+t('cancel')+'</button>'+
@@ -1597,21 +1788,54 @@ function openAddChannelModal(){
   $('detailBg').classList.add('show');
 }
 async function submitAddChannel(){
-  const name=$('mChName').value.trim();if(!name)return;
-  const botToken=$('mChToken').value.trim();if(!botToken)return;
-  const r=await api('/api/channels','POST',{type:'telegram',name,config:{botToken}});
+  var type=$('mChType').value;
+  var name=$('mChName').value.trim();if(!name)return;
+  var botToken=$('mChToken').value.trim();if(!botToken)return;
+  var config={botToken};
+  if(type==='slack'){
+    var appToken=$('mChAppToken').value.trim();
+    if(!appToken)return;
+    config.appToken=appToken;
+  }
+  var r=await api('/api/channels','POST',{type:type,name:name,config:config});
   if(!r.ok){showAlert(t('failedCreateChannel'),'❌');return}
-  const pr=await api('/api/channels/'+r.id+'/pair','POST',{botToken});
+  var pairBody={channelType:type,botToken:botToken};
+  if(type==='slack')pairBody.appToken=config.appToken;
+  var pr=await api('/api/channels/'+r.id+'/pair','POST',pairBody);
   if(!pr.success)showAlert(t('pairingFailed')+(pr.error||'Unknown'),'❌');
   closeDetail();load();
 }
 
+function tgPlatHintFor(plat){
+  if(plat==='discord')return t('platformUserIdHintDiscord');
+  if(plat==='slack')return t('platformUserIdHintSlack');
+  return t('platformUserIdHint');
+}
+function updateTgPlatFields(){
+  var plat=$('mTgPlat').value;
+  var typeEl=$('mTgType');
+  var tt=typeEl?typeEl.value:'user';
+  if(tt==='room'){
+    $('mTgIdHint').innerHTML=t('roomIdHint');
+    var lbl=$('mTgIdLabel');if(lbl)lbl.textContent=t('roomId');
+  }else{
+    $('mTgIdHint').innerHTML=tgPlatHintFor(plat);
+    var lbl2=$('mTgIdLabel');if(lbl2)lbl2.textContent=t('platformUserId');
+  }
+  // Telegram은 room 타입 불가
+  if(typeEl){
+    var roomOpt=typeEl.querySelector('option[value="room"]');
+    if(roomOpt)roomOpt.disabled=(plat==='telegram');
+    if(plat==='telegram'&&tt==='room')typeEl.value='user';
+  }
+}
 function openAddTargetModal(){
-  const panel=$('detailPanel');
+  var panel=$('detailPanel');
   panel.innerHTML=
     '<div class="d-hdr"><h3>'+t('target')+' '+t('create')+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
-    '<div class="d-field"><label>'+t('platform')+'</label><div class="field-hint">'+t('platformSelectHint')+'</div><select id="mTgPlat"><option value="telegram">Telegram</option></select></div>'+
-    '<div class="d-field"><label>'+t('platformUserId')+'</label><div class="field-hint">'+t('platformUserIdHint')+'</div><input id="mTgId" placeholder="'+t('phPlatformUserId')+'"></div>'+
+    '<div class="d-field"><label>'+t('platform')+'</label><div class="field-hint">'+t('platformSelectHint')+'</div><select id="mTgPlat" onchange="updateTgPlatFields()"><option value="telegram">Telegram</option><option value="discord">Discord</option><option value="slack">Slack</option></select></div>'+
+    '<div class="d-field"><label>'+t('targetType')+'</label><div class="field-hint">'+t('targetTypeHint')+'</div><select id="mTgType" onchange="updateTgPlatFields()"><option value="user">'+t('targetTypeUser')+'</option><option value="room">'+t('targetTypeRoom')+'</option></select></div>'+
+    '<div class="d-field"><label id="mTgIdLabel">'+t('platformUserId')+'</label><div class="field-hint" id="mTgIdHint">'+t('platformUserIdHint')+'</div><input id="mTgId" placeholder="'+t('phPlatformUserId')+'"></div>'+
     '<div class="d-field"><label>'+t('nickname')+'</label><div class="field-hint">'+t('nicknameHint')+'</div><input id="mTgNick" placeholder="'+t('phNickname')+'"></div>'+
     '<div class="d-actions">'+
       '<button class="btn btn-p" onclick="submitAddTarget()">'+t('create')+'</button>'+
@@ -1620,9 +1844,10 @@ function openAddTargetModal(){
   $('detailBg').classList.add('show');
 }
 async function submitAddTarget(){
-  const tid=$('mTgId').value.trim(),nick=$('mTgNick').value.trim(),plat=$('mTgPlat').value;
+  const tid=$('mTgId').value.trim(),nick=$('mTgNick').value.trim(),plat=$('mTgPlat').value,tt=$('mTgType').value;
   if(!tid||!nick)return;
-  await api('/api/targets','POST',{targetId:tid,nickname:nick,platform:plat});
+  const res=await api('/api/targets','POST',{targetId:tid,nickname:nick,platform:plat,targetType:tt});
+  if(res&&res.error){showAlert(res.error);return}
   closeDetail();load();
 }
 
@@ -1741,8 +1966,9 @@ async function saveAgentDetail(id){
 function openChannelDetail(id){
   const ch=D.managedChannels.find(c=>c.id===id);if(!ch)return;
   const paired=ch.pairing_status==='paired';
+  const showAutoSession=(ch.type==='discord'||ch.type==='slack');
   let configDisplay='';
-  try{const cfg=JSON.parse(ch.config_json||'{}');if(cfg.botUsername)configDisplay='@'+cfg.botUsername;else if(cfg.botToken)configDisplay=cfg.botToken.slice(0,8)+'...'}catch{}
+  try{const cfg=JSON.parse(ch.config_json||'{}');if(cfg.botUsername)configDisplay='@'+cfg.botUsername;else if(cfg.botName)configDisplay=cfg.botName+(cfg.teamName?' ('+cfg.teamName+')':'');else if(cfg.botToken)configDisplay=cfg.botToken.slice(0,8)+'...'}catch{}
   const panel=$('detailPanel');
   panel.innerHTML=
     '<div class="d-hdr"><h3>'+esc(ch.name)+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
@@ -1751,6 +1977,7 @@ function openChannelDetail(id){
     '<div class="d-field"><label>'+t('platform')+'</label><div class="d-val">'+esc(ch.type)+'</div></div>'+
     '<div class="d-field"><label>'+t('status')+'</label><div class="d-val"><span class="'+(paired?'paired':'pending')+'">'+(paired?t('paired'):t('pending'))+'</span></div></div>'+
     (configDisplay?'<div class="d-field"><label>'+t('bot')+'</label><div class="d-val">'+esc(configDisplay)+'</div></div>':'')+
+    (showAutoSession?'<div class="d-field"><label class="check-label"><input type="checkbox" id="dChAutoSession"'+(ch.auto_session?' checked':'')+'> '+t('autoSession')+'</label><div class="field-hint">'+t('autoSessionHint')+'</div></div>':'')+
     '<div class="d-actions">'+
       '<button class="btn btn-p" onclick="saveChannelDetail(\\''+ch.id+'\\')">'+t('save')+'</button>'+
       '<button class="btn btn-g" onclick="closeDetail()">'+t('cancel')+'</button>'+
@@ -1761,20 +1988,24 @@ function openChannelDetail(id){
 }
 
 async function saveChannelDetail(id){
-  await api('/api/channels/'+id,'PUT',{name:$('dChName').value.trim()});
+  const autoEl=$('dChAutoSession');
+  const autoSession=autoEl?autoEl.checked?1:0:undefined;
+  await api('/api/channels/'+id,'PUT',{name:$('dChName').value.trim(),autoSession:autoSession});
   closeDetail();load();
 }
 
 function openTargetDetail(id){
   const tg=D.targets.find(t=>t.id===id);if(!tg)return;
   const svcCount=D.services.filter(s=>s.target_id===tg.id).length;
+  const tt=tg.target_type||'user';
   const panel=$('detailPanel');
   panel.innerHTML=
     '<div class="d-hdr"><h3>'+esc(tg.nickname)+'</h3><button class="d-close" onclick="closeDetail()">\\u2715</button></div>'+
     '<span class="d-tag tg">'+t('target')+'</span>'+
-    '<div class="d-field"><label>'+t('platform')+'</label><select id="dTgPlat"><option value="telegram" selected>Telegram</option></select></div>'+
+    '<div class="d-field"><label>'+t('platform')+'</label><select id="dTgPlat"><option value="telegram"'+(tg.platform==='telegram'?' selected':'')+'>Telegram</option><option value="discord"'+(tg.platform==='discord'?' selected':'')+'>Discord</option><option value="slack"'+(tg.platform==='slack'?' selected':'')+'>Slack</option></select></div>'+
+    '<div class="d-field"><label>'+t('targetType')+'</label><div class="d-val">'+(tt==='room'?t('targetTypeRoom'):t('targetTypeUser'))+'</div></div>'+
     '<div class="d-field"><label>'+t('nickname')+'</label><input id="dTgNick" value="'+esc(tg.nickname).replace(/"/g,'&quot;')+'"></div>'+
-    '<div class="d-field"><label>'+t('platformUserId')+'</label><input id="dTgId" value="'+esc(tg.target_id).replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="d-field"><label>'+(tt==='room'?t('roomId'):t('platformUserId'))+'</label><input id="dTgId" value="'+esc(tg.target_id).replace(/"/g,'&quot;')+'"></div>'+
     (svcCount?'<div class="d-field"><label>Active Services</label><div class="d-val">'+svcCount+' service'+(svcCount>1?'s':'')+'</div></div>':'')+
     '<div class="d-actions">'+
       '<button class="btn btn-p" onclick="saveTargetDetail(\\''+tg.id+'\\')">'+t('save')+'</button>'+
@@ -1786,7 +2017,8 @@ function openTargetDetail(id){
 }
 
 async function saveTargetDetail(id){
-  await api('/api/targets/'+id,'PUT',{nickname:$('dTgNick').value.trim(),targetId:$('dTgId').value.trim(),platform:$('dTgPlat').value});
+  const res=await api('/api/targets/'+id,'PUT',{nickname:$('dTgNick').value.trim(),targetId:$('dTgId').value.trim(),platform:$('dTgPlat').value});
+  if(res&&res.error){showAlert(res.error);return}
   closeDetail();load();
 }
 
@@ -1953,13 +2185,13 @@ function renderBlocks(){
     const warn=getChannelWarning(c);
     const avatar = c.thumbnail || (c.name||'C').charAt(0).toUpperCase();
     const meta = c.type+(paired?' PAIRED':' PENDING');
-    return '<div class="blk ch" draggable="true" '+
-      'ondragstart="dragMoved=false;onDragStart(event,\\'channel\\',\\''+c.id+'\\',\\''+esc(c.name).replace(/'/g,"\\\\&#39;")+'\\',\\''+avatar.replace(/'/g,"\\\\&#39;")+'\\',\\''+esc(meta).replace(/'/g,"\\\\&#39;")+'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
+    return '<div class="blk ch" draggable="true" data-platform="'+c.type+'" '+
+      'ondragstart="dragMoved=false;onDragStart(event,\\'channel\\',\\''+c.id+'\\',\\''+esc(c.name).replace(/'/g,"\\\\&#39;")+'\\',\\''+avatar.replace(/'/g,"\\\\&#39;")+'\\',\\''+esc(meta).replace(/'/g,"\\\\&#39;")+'\\',\\''+c.type+'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
       ' onclick="if(!dragMoved){event.stopPropagation();openChannelDetail(\\''+c.id+'\\')}" style="cursor:pointer">'+
       '<div class="blk-avatar">'+avatar+'</div>'+
       '<div class="blk-body">'+
       '<div class="blk-name">'+esc(c.name)+(svcCount?' <span class="in-use">\\u00d7'+svcCount+'</span>':'')+'</div>'+
-      '<div class="blk-meta">'+c.type+' <span class="'+(paired?'paired':'pending')+'">'+(paired?'PAIRED':'PENDING')+'</span></div>'+
+      '<div class="blk-meta">'+({telegram:'Telegram',discord:'Discord',slack:'Slack'}[c.type]||c.type)+' <span class="'+(paired?'paired':'pending')+'">'+(paired?'PAIRED':'PENDING')+'</span></div>'+
       (warn?'<div class="blk-warn">\\u26A0 '+esc(warn)+'</div>':'')+
       '</div>'+
       (svcCount?'':'<button class="blk-del" onclick="event.stopPropagation();delCh(\\''+c.id+'\\')">\\u2715</button>')+
@@ -1967,17 +2199,23 @@ function renderBlocks(){
   }).join('')||'<div style="color:var(--t3);font-size:.82rem;padding:8px">'+esc(t('noChannels'))+'</div>';
 
   // Targets
+  var platBadgeColors={telegram:'#0088cc',discord:'#5865F2',slack:'#4A154B'};
   $('tgBlocks').innerHTML=D.targets.map(t=>{
     const svcCount=D.services.filter(s=>s.target_id===t.id).length;
-    const platLabel='TG';
-    const avatar = t.thumbnail || (t.nickname||'T').charAt(0).toUpperCase();
-    const meta = platLabel+' '+t.target_id;
-    return '<div class="blk tg" draggable="true" ondragstart="dragMoved=false;onDragStart(event,\\'target\\',\\''+t.id+'\\',\\''+esc(t.nickname).replace(/'/g,"\\\\&#39;")+'\\',\\''+avatar.replace(/'/g,"\\\\&#39;")+'\\',\\''+esc(meta).replace(/'/g,"\\\\&#39;")+'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
+    const platLabel={telegram:'Telegram',discord:'Discord',slack:'Slack'}[t.platform]||t.platform;
+    const platColor=platBadgeColors[t.platform]||'var(--t3)';
+    const isRoom=t.target_type==='room';
+    const avatar = t.thumbnail || (isRoom?'#':(t.nickname||'T').charAt(0).toUpperCase());
+    const displayName = isRoom?'#'+t.nickname:t.nickname;
+    const platBadge='<span style="font-size:.62rem;font-weight:700;background:'+platColor+';color:#fff;border-radius:3px;padding:1px 4px;margin-right:3px;vertical-align:1px">'+platLabel+'</span>';
+    const typeTag = isRoom?'<span style="font-size:.62rem;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;vertical-align:1px">ROOM</span>':'';
+    const meta = t.target_id;
+    return '<div class="blk tg" draggable="true" data-platform="'+t.platform+'" ondragstart="dragMoved=false;onDragStart(event,\\'target\\',\\''+t.id+'\\',\\''+esc(t.nickname).replace(/'/g,"\\\\&#39;")+'\\',\\''+avatar.replace(/'/g,"\\\\&#39;")+'\\',\\''+esc(platLabel+' '+meta).replace(/'/g,"\\\\&#39;")+'\\',\\''+t.platform+'\\');return true" ondragend="onDragEnd(event)" onmousemove="if(event.buttons)dragMoved=true"'+
       ' onclick="if(!dragMoved){event.stopPropagation();openTargetDetail(\\''+t.id+'\\')}" style="cursor:pointer">'+
       '<div class="blk-avatar">'+avatar+'</div>'+
       '<div class="blk-body">'+
-      '<div class="blk-name">'+esc(t.nickname)+(svcCount?' <span class="in-use">\u00d7'+svcCount+'</span>':'')+'</div>'+
-      '<div class="blk-meta"><span style="opacity:.7">'+platLabel+'</span> '+esc(t.target_id)+'</div>'+
+      '<div class="blk-name">'+platBadge+typeTag+esc(displayName)+(svcCount?' <span class="in-use">\u00d7'+svcCount+'</span>':'')+'</div>'+
+      '<div class="blk-meta">'+esc(meta)+'</div>'+
       '</div>'+
       (svcCount?'':'<button class="blk-del" onclick="event.stopPropagation();delTg(\\''+t.id+'\\')">\\u2715</button>')+
       '</div>'
@@ -2783,10 +3021,25 @@ export function startWebUiServer(
       ) {
         const channelId = decodeURIComponent(url.pathname.split('/')[3]);
         const body = await readJsonBody(req);
-        const result = await context.pairTelegramBot(
-          channelId,
-          typeof body.botToken === 'string' ? body.botToken.trim() : '',
-        );
+        const channelType =
+          typeof body.channelType === 'string' ? body.channelType : 'telegram';
+        const botToken =
+          typeof body.botToken === 'string' ? body.botToken.trim() : '';
+
+        let result: {
+          success: boolean;
+          error?: string;
+          botUsername?: string;
+        };
+        if (channelType === 'discord') {
+          result = await context.pairDiscordBot(channelId, botToken);
+        } else if (channelType === 'slack') {
+          const appToken =
+            typeof body.appToken === 'string' ? body.appToken.trim() : '';
+          result = await context.pairSlackBot(channelId, botToken, appToken);
+        } else {
+          result = await context.pairTelegramBot(channelId, botToken);
+        }
         sendJson(res, result.success ? 200 : 400, result);
         return;
       }
@@ -2800,6 +3053,10 @@ export function startWebUiServer(
         const body = await readJsonBody(req);
         context.updateManagedChannel(id, {
           name: typeof body.name === 'string' ? body.name : undefined,
+          autoSession:
+            typeof body.autoSession === 'number'
+              ? body.autoSession
+              : undefined,
         });
         sendJson(res, 200, { ok: true });
         return;
@@ -2821,10 +3078,22 @@ export function startWebUiServer(
           typeof body.targetId === 'string' ? body.targetId.trim() : '';
         const nickname =
           typeof body.nickname === 'string' ? body.nickname.trim() : '';
-        const platform = 'telegram' as const;
+        const validPlatforms: string[] = ['telegram', 'discord', 'slack'];
+        const platform = (
+          validPlatforms.includes(body.platform as string)
+            ? body.platform
+            : 'telegram'
+        ) as 'telegram' | 'discord' | 'slack';
+        const targetType =
+          body.targetType === 'room' ? ('room' as const) : ('user' as const);
         if (!targetId || !nickname)
           throw new Error('targetId/nickname required');
-        const id = context.createTarget({ targetId, nickname, platform });
+        const id = context.createTarget({
+          targetId,
+          nickname,
+          platform,
+          targetType,
+        });
         sendJson(res, 200, { ok: true, id });
         return;
       }
@@ -2836,12 +3105,15 @@ export function startWebUiServer(
           url.pathname.replace('/api/targets/', ''),
         );
         const body = await readJsonBody(req);
+        const validPlats: string[] = ['telegram', 'discord', 'slack'];
         context.updateTarget(id, {
           targetId:
             typeof body.targetId === 'string' ? body.targetId : undefined,
           nickname:
             typeof body.nickname === 'string' ? body.nickname : undefined,
-          platform: body.platform === 'telegram' ? body.platform : undefined,
+          platform: validPlats.includes(body.platform as string)
+            ? (body.platform as 'telegram' | 'discord' | 'slack')
+            : undefined,
         });
         sendJson(res, 200, { ok: true });
         return;

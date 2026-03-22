@@ -4,8 +4,8 @@
  * BuiltinSkill: 코드 레벨 도구 정의 (AI SDK Tool)
  * 에이전트별 토글로 활성화/비활성화. 활성화 시 tool + 시스템 프롬프트 주입.
  *
- * 멀티타겟 워크스페이스: workspacePath는 타겟별 서브폴더를 가리킴.
- * agentWorkspacePath는 에이전트 루트 (타겟 폴더의 상위). _shared/ 접근에 사용.
+ * 멀티채널+멀티타겟 워크스페이스: workspacePath는 채널→타겟 서브폴더를 가리킴.
+ * agentWorkspacePath는 에이전트 루트 (채널/타겟 폴더의 상위). _shared/ 접근에 사용.
  */
 import type { Tool } from 'ai';
 
@@ -31,12 +31,14 @@ export interface BuiltinSkill {
 }
 
 export interface SkillContext {
-  /** 타겟별 워크스페이스 절대 경로 (파일 도구의 루트) */
+  /** 채널→타겟별 워크스페이스 절대 경로 (파일 도구의 루트) */
   workspacePath: string;
   /** 에이전트 워크스페이스 루트 경로 (_shared/ 접근, 플랜 파일 저장 등) */
   agentWorkspacePath: string;
   /** 에이전트 프로필 ID */
   agentId: string;
+  /** 채널 ID (워크스페이스 3-depth 경로 해석) */
+  channelId?: string;
   /** 대상 사용자 닉네임 (멀티타겟 식별) */
   targetName?: string;
   /** 채널로 메세지 즉시 전송 (send_message 스킬 + plan executor 용) */

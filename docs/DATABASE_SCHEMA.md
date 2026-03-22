@@ -5,7 +5,7 @@
 ## Core Model: Agent + Channel + Target = Service
 
 - **Agent**: AI agent profile (provider, model, system prompt)
-- **Channel**: Messenger bot (Telegram)
+- **Channel**: Messenger bot (Telegram, Discord, Slack)
 - **Target**: User to serve
 - **Service**: Active binding of the above three
 
@@ -93,14 +93,19 @@ Full conversation backup before each compaction. One row per compaction event.
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | TEXT PK | |
-| `type` | TEXT | `telegram` |
+| `type` | TEXT | `telegram` / `discord` / `slack` (ChannelType) |
 | `name` | TEXT | Display name |
 | `config_json` | TEXT | Bot token, auth credentials, etc. |
 | `status` | TEXT | `configured` / `active` |
 | `pairing_status` | TEXT | `pending` / `paired` / `error` |
+| `folder_name` | TEXT | Workspace folder name (type-name slug, workspace 3-depth 중간층) |
+| `auto_session` | INTEGER | 0 = off (default), 1 = auto-create Target+Service for new users/rooms |
 | `thumbnail` | TEXT | Food emoji thumbnail (randomly assigned) |
 | `created_at` | TEXT | |
 | `updated_at` | TEXT | |
+
+- `auto_session`: Discord/Slack 전용. 활성화 시 미등록 유저의 DM이나 채널 @멘션에 자동으로 Target+Service 생성.
+- 자동 생성 조건: 해당 채널에 연결된 에이전트가 정확히 1개일 때만 (2개 이상이면 어떤 에이전트인지 결정 불가).
 
 ## Target Table
 
@@ -109,12 +114,16 @@ Full conversation backup before each compaction. One row per compaction event.
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | TEXT PK | Internal ID |
-| `target_id` | TEXT UNIQUE | Platform user ID (Telegram user id) |
-| `nickname` | TEXT | Display name |
-| `platform` | TEXT | `telegram` |
+| `target_id` | TEXT UNIQUE | Platform user ID or room/channel ID |
+| `nickname` | TEXT | Display name (room targets use `#channel-name` convention) |
+| `platform` | TEXT | `telegram` / `discord` / `slack` (ChannelType) |
+| `target_type` | TEXT | `user` (DM target) / `room` (channel/thread target). Default `user` |
 | `thumbnail` | TEXT | Food emoji thumbnail (randomly assigned) |
 | `created_at` | TEXT | |
 | `updated_at` | TEXT | |
+
+- `target_type = 'user'`: DM으로 응답. Telegram/Discord/Slack 공통.
+- `target_type = 'room'`: 해당 채널/스레드에 응답. Discord/Slack 전용 (Telegram 미지원).
 
 ## LLM Provider Table
 
@@ -229,13 +238,15 @@ Service ↔ Cron junction table. One cron can be reused across multiple services
 
 ## Runtime Rules
 
-- Service matching: lookup by `channel_id + target.target_id` for active services
+- Service matching (user target): lookup by `channel_id + target.target_id` where `target_type='user'`
+- Service matching (room target): lookup by `channel_id + target.target_id` where `target_type='room'`
+- Auto-session: `managed_channels.auto_session=1` + single agent → auto-create target+service on first interaction
 - Conversation context: up to 200 recent messages per service
 - Service deletion cascades to conversations and archives
 - Agent deletion cascades to linked services, custom skill assignments, and workspace (default profile cannot be deleted)
 - Targets are reusable across multiple services
 - Agent workspaces at `store/workspaces/<folder_name>/` — name-based folder, auto-renamed on agent rename
-- Multi-target workspace: `store/workspaces/<agent>/<target-name>/` — per-target subfolder, `_shared/` for shared files
+- Multi-channel + multi-target workspace: `store/workspaces/<agent>/<channel>/<target>/` — 3-depth 구조, `_shared/` for shared files (에이전트 루트)
 - Plan files: `_plan-{serviceId}.json` in agent workspace root (service-scoped)
 - Custom skill scripts at `store/skills/<folder_name>/` — 4 files auto-generated (run.sh, schema.json, prompt.txt, GUIDE.md), auto-renamed on skill rename
 - Prompt priority: `prompt.txt` file > DB `custom_skills.prompt` field

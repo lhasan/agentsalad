@@ -1,10 +1,10 @@
 /**
- * Workspace Manager — 에이전트/스킬별 격리 파일 공간
+ * Workspace Manager — 에이전트/채널/타겟 3-depth 격리 파일 공간
  *
- * 멀티타겟 구조:
- *   store/workspaces/<agent>/           — 에이전트 워크스페이스 루트
- *   store/workspaces/<agent>/_shared/   — 공용 폴더 (모든 타겟 접근 가능)
- *   store/workspaces/<agent>/<target>/  — 타겟별 개인 폴더 (파일 도구 루트)
+ * 멀티채널 + 멀티타겟 구조:
+ *   store/workspaces/<agent>/                     — 에이전트 워크스페이스 루트
+ *   store/workspaces/<agent>/_shared/             — 공용 폴더 (모든 채널, 모든 타겟 접근)
+ *   store/workspaces/<agent>/<channel>/<target>/  — 채널→타겟 개인 폴더 (파일 도구 루트)
  *
  * 커스텀 스킬: store/skills/<folder_name>/ — 사용자/LLM 에이전트가 직접 편집하는 스킬 폴더.
  *
@@ -100,24 +100,27 @@ export function ensureWorkspace(agentId: string): string {
   return wsPath;
 }
 
-// ── 타겟별 워크스페이스 (멀티타겟) ──
+// ── 채널+타겟별 워크스페이스 (멀티채널 + 멀티타겟) ──
 
-/** 에이전트 워크스페이스 내 타겟 전용 서브폴더 경로 */
+/** 에이전트 워크스페이스 내 채널→타겟 전용 서브폴더 경로 */
 export function getTargetWorkspacePath(
   agentId: string,
+  channelId: string,
   targetName: string,
 ): string {
-  const slug = toFolderSlug(targetName);
-  return join(getWorkspacePath(agentId), slug);
+  const channelSlug = resolveFolderName(channelId);
+  const targetSlug = toFolderSlug(targetName);
+  return join(getWorkspacePath(agentId), channelSlug, targetSlug);
 }
 
-/** 타겟 워크스페이스 + _shared/ 폴더 함께 생성 */
+/** 채널→타겟 워크스페이스 + _shared/ 폴더 함께 생성 */
 export function ensureTargetWorkspace(
   agentId: string,
+  channelId: string,
   targetName: string,
 ): string {
   ensureWorkspace(agentId);
-  const targetPath = getTargetWorkspacePath(agentId, targetName);
+  const targetPath = getTargetWorkspacePath(agentId, channelId, targetName);
   if (!existsSync(targetPath)) mkdirSync(targetPath, { recursive: true });
   const sharedPath = join(getWorkspacePath(agentId), '_shared');
   if (!existsSync(sharedPath)) mkdirSync(sharedPath, { recursive: true });
@@ -130,6 +133,24 @@ export function removeWorkspace(agentId: string): void {
     rmSync(wsPath, { recursive: true, force: true });
   }
   unregisterFolderName(agentId);
+}
+
+/** 채널 이름 변경 시 에이전트 워크스페이스 내 채널 폴더 리네임 */
+export function renameChannelFolder(
+  agentId: string,
+  channelId: string,
+  newFolderName: string,
+): void {
+  const agentWs = getWorkspacePath(agentId);
+  const oldSlug = resolveFolderName(channelId);
+  const oldPath = join(agentWs, oldSlug);
+  const newPath = join(agentWs, newFolderName);
+  if (existsSync(oldPath) && oldPath !== newPath) {
+    if (!existsSync(newPath)) {
+      renameSync(oldPath, newPath);
+    }
+  }
+  registerFolderName(channelId, newFolderName);
 }
 
 /** 에이전트 이름 변경 시 워크스페이스 폴더 리네임 */

@@ -152,9 +152,7 @@ When the user asks to "show" a page, use browse_screenshot after navigating to s
         description:
           'Type text into an input element. Clears existing value first.',
         inputSchema: z.object({
-          selector: z
-            .string()
-            .describe('CSS selector of the input element'),
+          selector: z.string().describe('CSS selector of the input element'),
           text: z.string().describe('Text to type into the field'),
         }),
         execute: async ({ selector, text }) => {
@@ -214,7 +212,13 @@ When the user asks to "show" a page, use browse_screenshot after navigating to s
                 sentToChat = true;
               } catch (photoErr) {
                 logger.warn(
-                  { sessionId, err: photoErr instanceof Error ? photoErr.message : String(photoErr) },
+                  {
+                    sessionId,
+                    err:
+                      photoErr instanceof Error
+                        ? photoErr.message
+                        : String(photoErr),
+                  },
                   'Failed to send screenshot to chat',
                 );
               }
@@ -244,9 +248,7 @@ When the user asks to "show" a page, use browse_screenshot after navigating to s
         description:
           'Scroll the page up or down by a specified amount in pixels.',
         inputSchema: z.object({
-          direction: z
-            .enum(['up', 'down'])
-            .describe('Scroll direction'),
+          direction: z.enum(['up', 'down']).describe('Scroll direction'),
           pixels: z
             .number()
             .optional()
@@ -260,15 +262,15 @@ When the user asks to "show" a page, use browse_screenshot after navigating to s
             await page.mouse.wheel(0, delta);
             await page.waitForTimeout(300);
 
-            const scrollY = await page.evaluate(
+            const scrollY = (await page.evaluate(
               'window.scrollY' as string,
-            ) as number;
-            const scrollHeight = await page.evaluate(
+            )) as number;
+            const scrollHeight = (await page.evaluate(
               'document.documentElement.scrollHeight' as string,
-            ) as number;
-            const clientHeight = await page.evaluate(
+            )) as number;
+            const clientHeight = (await page.evaluate(
               'document.documentElement.clientHeight' as string,
-            ) as number;
+            )) as number;
 
             return {
               success: true,
@@ -291,9 +293,7 @@ When the user asks to "show" a page, use browse_screenshot after navigating to s
         description:
           'Wait for an element matching the CSS selector to appear on the page.',
         inputSchema: z.object({
-          selector: z
-            .string()
-            .describe('CSS selector to wait for'),
+          selector: z.string().describe('CSS selector to wait for'),
           timeout: z
             .number()
             .optional()

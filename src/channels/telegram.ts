@@ -4,6 +4,7 @@
  * 페어링: 봇 토큰 입력 -> getMe() 검증 -> DB 저장
  * 메시지 수신: long polling
  * 메시지 발송: sendMessage API
+ * Telegram은 DM 전용 채널이므로 context.isDM=true 고정 전달.
  */
 import { Bot, InputFile } from 'grammy';
 
@@ -35,7 +36,7 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
       'Telegram message received',
     );
 
-    onMessage(channelId, userId, userName, text);
+    onMessage(channelId, userId, userName, text, { isDM: true });
   });
 
   bot.catch((err) => {
@@ -110,19 +111,32 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
       }
     },
 
-    async sendPhoto(targetUserId: string, filePath: string, caption?: string): Promise<void> {
+    async sendPhoto(
+      targetUserId: string,
+      filePath: string,
+      caption?: string,
+    ): Promise<void> {
       const chatId = Number(targetUserId);
       try {
-        const result = await bot.api.sendPhoto(chatId, new InputFile(filePath), {
-          caption: caption ? caption.slice(0, 1024) : undefined,
-        });
+        const result = await bot.api.sendPhoto(
+          chatId,
+          new InputFile(filePath),
+          {
+            caption: caption ? caption.slice(0, 1024) : undefined,
+          },
+        );
         logger.debug(
           { channelId, chatId, messageId: result.message_id },
           'Telegram photo delivered',
         );
       } catch (err) {
         logger.warn(
-          { channelId, chatId, filePath, err: err instanceof Error ? err.message : String(err) },
+          {
+            channelId,
+            chatId,
+            filePath,
+            err: err instanceof Error ? err.message : String(err),
+          },
           'Failed to send Telegram photo',
         );
       }

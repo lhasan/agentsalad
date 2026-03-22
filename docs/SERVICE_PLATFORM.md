@@ -13,7 +13,7 @@ The platform's fundamental unit is a **Service** — a bound triple of:
 | Component | What it is | Storage |
 |-----------|-----------|---------|
 | **Agent** | LLM configuration: provider, model, system prompt, tool toggles | `agent_profiles` table |
-| **Channel** | Messenger bot: Telegram with pairing state | `managed_channels` table |
+| **Channel** | Messenger bot: Telegram, Discord, Slack with pairing state | `managed_channels` table |
 | **Target** | User to serve: platform-specific user ID + nickname | `targets` table |
 | **Service** | Active binding of the above three | `services` table |
 
@@ -30,13 +30,13 @@ The platform's fundamental unit is a **Service** — a bound triple of:
 │                    HOST (Node.js Process)                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌──────────────┐   ┌──────────────┐                              │
-│  │ Web UI       │   │ Telegram     │                              │
-│  │ :3210        │   │ (grammY)     │                              │
-│  │ Admin CRUD   │   │ Bot API      │                              │
-│  └──────┬───────┘   └──────┬───────┘                              │
-│         │                  │                                      │
-│         │        ┌─────────┘                                      │
+│  ┌──────────────┐   ┌──────────────┐  ┌─────────┐  ┌───────┐     │
+│  │ Web UI       │   │ Telegram     │  │ Discord │  │ Slack │     │
+│  │ :3210        │   │ (grammY)     │  │ (d.js)  │  │ (bolt)│     │
+│  │ Admin CRUD   │   │ Bot API      │  │ Gateway │  │ Socket│     │
+│  └──────┬───────┘   └──────┬───────┘  └────┬────┘  └───┬───┘     │
+│         │                  │              │             │          │
+│         │        ┌─────────┴──────────────┴─────────────┘          │
 │         │        │  onMessage(channelId, userId, name, text)     │
 │         │        ▼                                               │
 │         │  ┌──────────────────────────────────────────────┐     │
@@ -172,22 +172,26 @@ Builtin skills (code-level tools, per-agent toggle):
 Custom skills: script + prompt bundles stored in `custom_skills` table, per-agent toggle via `agent_custom_skills`.
 When a custom skill has a `script`, it is dynamically registered as an AI SDK Tool (via `tool_name` + `input_schema` → Zod schema). Scripts execute via `child_process.exec` with agent workspace as cwd, input passed as JSON stdin + `INPUT_*` environment variables. Prompt-only skills (no script) inject system prompt text.
 
-### Agent Workspaces (Multi-Target)
+### Agent Workspaces (Multi-Channel + Multi-Target, 3-depth)
 
-Each agent gets a workspace at `store/workspaces/<agent-name>/`. Within it, each target user gets a personal subfolder, plus a shared `_shared/` folder:
+Each agent gets a workspace at `store/workspaces/<agent-name>/`. Within it, channels get a subfolder, and each target user gets a personal subfolder inside the channel, plus a shared `_shared/` folder at agent root:
 
 ```
 store/workspaces/<agent>/
-├── _shared/          ← Shared folder (all targets can access)
-├── <target-A>/       ← Target A's personal folder (file tool root)
-│   └── ...
-├── <target-B>/       ← Target B's personal folder
-│   └── ...
+├── _shared/                    ← Shared folder (all channels, all targets can access)
+├── <telegram-bot>/             ← Channel folder (type-name slug)
+│   ├── <target-A>/             ← Target A's personal folder (file tool root)
+│   └── <target-B>/             ← Target B's personal folder
+├── <discord-bot>/              ← Another channel
+│   └── <target-C>/
+└── <slack-bot>/
+    └── <target-D>/
 ```
 
-- File tools (read/write/list) are scoped to the target's subfolder by default
-- `_shared/` prefix in file paths routes to the shared folder
+- File tools (read/write/list) are scoped to the channel→target subfolder by default
+- `_shared/` prefix in file paths routes to the agent-root shared folder
 - Path traversal is blocked via `resolveWorkspacePath()`
+- Channel folder name: `managed_channels.folder_name` (type-name slug)
 
 ### Tool Calling Flow
 
@@ -282,10 +286,36 @@ Direct API calls to each provider — no proxy layer, minimal latency.
 
 ## Channel System
 
+### Supported Channels
+
+| Channel | Package | Connection | Public URL |
+|---------|---------|-----------|------------|
+| **Telegram** | `grammy` | Long-polling (Bot API) | Not required |
+| **Discord** | `discord.js` | Gateway WebSocket | Not required |
+| **Slack** | `@slack/bolt` | Socket Mode (WebSocket) | Not required |
+
+All three channels use WebSocket/polling — **no public URL needed** for self-hosting.
+
+### Channel Factory
+
+`src/channels/factory.ts` — `createChannelByType(type, channelId, config, onMessage)` dispatches to the appropriate adapter based on `managed_channels.type`.
+
 ### Telegram (grammY)
 - Bot token verification via `verifyTelegramBot()`
 - Long-polling for message reception
 - `sendMessage()` via Bot API
+
+### Discord (discord.js)
+- Bot token verification via `verifyDiscordBot()`
+- Gateway WebSocket with Intents: Guilds, DirectMessages, GuildMessages, MessageContent
+- DM: `user.send()`, requires mutual guild
+- Message split at 2000 chars
+
+### Slack (@slack/bolt)
+- Token verification via `verifySlackBot()` (auth.test)
+- Socket Mode: WebSocket via App-Level Token (no public URL)
+- DM: `chat.postMessage()` to user channel
+- Requires 2 tokens: Bot User OAuth Token + App-Level Token
 
 ### Channel Interface
 
@@ -356,6 +386,8 @@ SQLite via `better-sqlite3`. See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for fu
 | `@ai-sdk/anthropic` | Anthropic provider |
 | `@ai-sdk/openai` | OpenAI provider (also Groq, OpenRouter, OpenCode) |
 | `grammy` | Telegram Bot API framework |
+| `discord.js` | Discord Gateway API (WebSocket) |
+| `@slack/bolt` | Slack SDK (Socket Mode, Bot Events) |
 | `better-sqlite3` | SQLite database |
 | `cron-parser` | Cron expression parsing |
 | `playwright` | Headless Chromium browser automation (web_browse skill) |
@@ -381,7 +413,10 @@ agentsalad/
 │   ├── timezone.ts                # Timezone utilities
 │   ├── web-ui.ts                  # Admin dashboard
 │   ├── channels/
-│   │   └── telegram.ts            # Telegram channel (grammY)
+│   │   ├── factory.ts             # Channel factory (type dispatch)
+│   │   ├── telegram.ts            # Telegram channel (grammY)
+│   │   ├── discord.ts             # Discord channel (discord.js)
+│   │   └── slack.ts               # Slack channel (@slack/bolt)
 │   ├── providers/
 │   │   ├── index.ts               # Provider router
 │   │   ├── system-prompt.ts       # Base system prompt

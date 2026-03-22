@@ -2,9 +2,33 @@
  * Agent Salad - Type Definitions
  *
  * Agent + Channel + Target = Service. 3요소 결합으로 서비스 활성화.
+ * 멀티채널: Telegram, Discord, Slack 지원. ChannelType 유니온으로 확장.
+ * TargetType: 'user'(DM) 또는 'room'(채널/스레드) 타겟 구분.
+ * MessageContext: 채널 어댑터가 전달하는 메시지 수신 컨텍스트 (DM/멘션/방 정보).
  * CustomSkill: script(실행) + prompt(사용법) 묶음.
  * CronJob/ServiceCron: 서비스 단위 예약 작업 (daily/once 스케줄).
  */
+
+// --- Channel Type (supported messenger platforms) ---
+
+export type ChannelType = 'telegram' | 'discord' | 'slack';
+
+// --- Target Type (user DM vs room/channel) ---
+
+export type TargetType = 'user' | 'room';
+
+// --- Message Context (channel adapter → service router) ---
+
+export interface MessageContext {
+  /** 메시지가 발생한 채널/스레드 ID (DM이면 undefined) */
+  roomId?: string;
+  /** 스레드 ID (Slack thread_ts 등, 스레드 답글용) */
+  threadId?: string;
+  /** DM 여부 */
+  isDM: boolean;
+  /** @봇 멘션 여부 (서버 채널 내에서) */
+  isMention?: boolean;
+}
 
 // --- Agent Profile ---
 
@@ -98,23 +122,29 @@ export interface LlmProvider {
 
 export interface ManagedChannel {
   id: string;
-  type: 'telegram';
+  type: ChannelType;
   name: string;
   config_json: string;
   status: string;
   pairing_status: 'pending' | 'paired' | 'error';
+  /** 워크스페이스 폴더명 (이름 기반, 리네임 추적) */
+  folder_name: string;
+  /** 자동 세션 생성: 1이면 미등록 유저/방의 DM/멘션 시 자동으로 Target+Service 생성 */
+  auto_session: number;
   thumbnail: string | null;
   created_at: string;
   updated_at: string;
 }
 
-// --- Target (User) ---
+// --- Target (User or Room) ---
 
 export interface TargetProfile {
   id: string;
   target_id: string;
   nickname: string;
-  platform: 'telegram';
+  platform: ChannelType;
+  /** 'user' = DM 대상, 'room' = 채널/스레드 대상 */
+  target_type: TargetType;
   thumbnail: string | null;
   created_at: string;
   updated_at: string;
@@ -186,6 +216,8 @@ export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string): Promise<void>;
+  /** 채널/스레드에 메시지 전송 (Discord 서버 채널, Slack 채널 등) */
+  sendToRoom?(roomId: string, text: string, threadId?: string): Promise<void>;
   sendPhoto?(jid: string, filePath: string, caption?: string): Promise<void>;
   isConnected(): boolean;
   disconnect(): Promise<void>;
@@ -199,12 +231,14 @@ export interface Channel {
  * channelId: which managed channel received it
  * senderUserId: the platform-specific user identifier (telegram user id, etc.)
  * text: message content
+ * context: DM/채널/멘션 등 메시지 수신 컨텍스트
  */
 export type OnServiceMessage = (
   channelId: string,
   senderUserId: string,
   senderName: string,
   text: string,
+  context?: MessageContext,
 ) => void;
 
 // --- Provider Error (API 에러 분류) ---

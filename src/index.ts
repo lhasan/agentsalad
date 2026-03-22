@@ -1,9 +1,11 @@
 /**
- * Agent Salad - Main Orchestrator
+ * Agent Salad — Main Orchestrator
  *
  * Agent + Channel + Target = Service 모델 기반.
- * 서비스 라우터: 채널에서 메시지 수신 -> 서비스 매칭 -> 프로바이더 호출 -> 응답 전송.
+ * 멀티채널: Telegram/Discord/Slack. 채널 팩토리로 타입별 분기.
+ * 워크스페이스 3-depth: store/workspaces/<agent>/<channel>/<target>/.
  * Web UI: 관리 대시보드 (에이전트/채널/타겟/서비스 CRUD).
+ * 서버 시작 시 folder_name 마이그레이션 + 2-depth→3-depth 워크스페이스 변환.
  */
 import { WEB_UI_ENABLED, WEB_UI_HOST, WEB_UI_PORT } from './config.js';
 import {
@@ -23,6 +25,8 @@ import {
   detachCronFromService,
   getAgentCustomSkills,
   getLlmProviderById,
+  getManagedChannelById,
+  getTargetById,
   initDatabase,
   listAgentProfiles,
   listCronJobs,
@@ -56,6 +60,7 @@ import {
   uniqueFolderSlug,
   renameSkillFolder,
   renameWorkspaceFolder,
+  renameChannelFolder,
   getSkillsRoot,
   getWorkspacesRoot,
 } from './skills/workspace.js';
@@ -66,6 +71,8 @@ import {
   getConnectedChannelInfo,
   connectChannel,
   verifyTelegramBot,
+  verifyDiscordBot,
+  verifySlackBot,
 } from './service-router.js';
 import { startWebUiServer } from './web-ui.js';
 import {
@@ -132,11 +139,11 @@ const THUMBS_CRON = [
 ];
 const pickRandom = (arr: string[]) =>
   arr[Math.floor(Math.random() * arr.length)];
-import { getTargetById } from './db.js';
 
 /**
  * folder_name이 NULL인 기존 데이터에 슬러그 세팅 + 물리 폴더 리네임.
  * 서버 시작마다 실행해도 안전 (이미 세팅된 행은 스킵).
+ * 에이전트, 커스텀 스킬, 채널 모두 처리.
  */
 function migrateFolderNames(): void {
   const entries: Array<{ id: string; folderName: string }> = [];
@@ -161,6 +168,17 @@ function migrateFolderNames(): void {
       entries.push({ id: agent.id, folderName: slug });
     } else {
       entries.push({ id: agent.id, folderName: agent.folder_name });
+    }
+  }
+
+  // Managed channels (채널 folder_name 마이그레이션)
+  for (const mc of listManagedChannels()) {
+    if (!mc.folder_name || mc.folder_name === mc.id) {
+      const slug = toFolderSlug(`${mc.type}-${mc.name}`);
+      updateManagedChannel(mc.id, { folderName: slug });
+      entries.push({ id: mc.id, folderName: slug });
+    } else {
+      entries.push({ id: mc.id, folderName: mc.folder_name });
     }
   }
 
@@ -189,82 +207,62 @@ function migrateFolderNames(): void {
 }
 
 /**
- * 워크스페이스 구조 마이그레이션: 에이전트 루트에 직접 있던 파일을 타겟 서브폴더로 이동.
- * 에이전트에 연결된 서비스가 정확히 1개일 때만 자동 마이그레이션.
- * 여러 서비스가 이미 연결된 경우 소유권 판단이 불가하므로 스킵 + 경고.
+ * 워크스페이스 3-depth 마이그레이션: agent/<target>/ → agent/<channel>/<target>/.
+ * 기존 2-depth 구조 (에이전트 루트에 타겟 폴더가 직접 있는 경우)를
+ * 서비스 테이블의 channel_id를 참조하여 채널 폴더 아래로 이동.
+ *
+ * 판단 기준: 에이전트 워크스페이스에 채널 folder_name과 일치하는 폴더가 없으면
+ * 기존 2-depth로 간주하고 마이그레이션.
  */
-function migrateWorkspaceToTargetFolders(): void {
+function migrateWorkspaceToChannelFolders(): void {
   const services = listServices();
-  const byAgent = new Map<string, typeof services>();
+  const channels = listManagedChannels();
+  const channelMap = new Map(channels.map((c) => [c.id, c]));
+
+  // 서비스별로 처리: 각 서비스의 target 폴더를 channel 하위로 이동
   for (const svc of services) {
-    const list = byAgent.get(svc.agent_profile_id) || [];
-    list.push(svc);
-    byAgent.set(svc.agent_profile_id, list);
-  }
+    const agentWsPath = getWorkspacePath(svc.agent_profile_id);
+    if (!existsSync(agentWsPath)) continue;
 
-  for (const [agentId, agentServices] of byAgent) {
-    const wsPath = getWorkspacePath(agentId);
-    if (!existsSync(wsPath)) continue;
-
-    // 이미 타겟 서브폴더 구조가 있으면 스킵 (_shared/ 존재 = 이미 마이그레이션 됨)
-    if (existsSync(join(wsPath, '_shared'))) continue;
-
-    // 루트에 파일/폴더가 있는지 확인
-    let rootEntries: string[];
-    try {
-      rootEntries = readdirSync(wsPath).filter(
-        (n) => !n.startsWith('.') && !n.startsWith('_plan'),
-      );
-    } catch {
-      continue;
-    }
-    if (rootEntries.length === 0) continue;
-
-    if (agentServices.length !== 1) {
-      logger.warn(
-        { agentId, serviceCount: agentServices.length },
-        'Workspace migration skipped: multiple services use this agent. Move files manually.',
-      );
-      continue;
-    }
-
-    const target = getTargetById(agentServices[0].target_id);
+    const target = getTargetById(svc.target_id);
     if (!target) continue;
 
+    const mc = channelMap.get(svc.channel_id);
+    if (!mc) continue;
+
     const targetSlug = toFolderSlug(target.nickname);
-    const targetPath = join(wsPath, targetSlug);
+    const channelSlug = mc.folder_name || toFolderSlug(`${mc.type}-${mc.name}`);
 
-    if (!existsSync(targetPath)) mkdirSync(targetPath, { recursive: true });
+    const oldTargetPath = join(agentWsPath, targetSlug);
+    const newChannelDir = join(agentWsPath, channelSlug);
+    const newTargetPath = join(newChannelDir, targetSlug);
 
-    let moved = 0;
-    for (const entry of rootEntries) {
-      if (entry === targetSlug || entry === '_shared') continue;
-      const src = join(wsPath, entry);
-      const dst = join(targetPath, entry);
+    // 이미 3-depth 구조에 있으면 스킵
+    if (existsSync(newTargetPath)) continue;
+
+    // 기존 2-depth 폴더가 있으면 이동
+    if (existsSync(oldTargetPath)) {
+      mkdirSync(newChannelDir, { recursive: true });
       try {
-        if (!existsSync(dst)) {
-          renameSync(src, dst);
-          moved++;
-        }
+        renameSync(oldTargetPath, newTargetPath);
+        logger.info(
+          {
+            agentId: svc.agent_profile_id,
+            target: target.nickname,
+            channel: channelSlug,
+          },
+          'Migrated workspace to 3-depth (agent/channel/target)',
+        );
       } catch (err) {
         logger.warn(
-          { agentId, entry, err },
-          'Failed to migrate workspace entry',
+          { agentId: svc.agent_profile_id, target: target.nickname, err },
+          'Failed to migrate workspace to 3-depth',
         );
       }
     }
-
-    // _shared/ 폴더 생성
-    const sharedPath = join(wsPath, '_shared');
-    if (!existsSync(sharedPath)) mkdirSync(sharedPath, { recursive: true });
-
-    if (moved > 0) {
-      logger.info(
-        { agentId, target: target.nickname, movedEntries: moved },
-        'Migrated workspace files to target subfolder',
-      );
-    }
   }
+
+  // _shared/ 폴더는 에이전트 루트에 유지 (이동 불필요)
 }
 
 async function main(): Promise<void> {
@@ -274,8 +272,8 @@ async function main(): Promise<void> {
   // folder_name 마이그레이션 + 인메모리 맵 초기화
   migrateFolderNames();
 
-  // 워크스페이스 구조 마이그레이션 (에이전트 루트 → 타겟 서브폴더)
-  migrateWorkspaceToTargetFolders();
+  // 워크스페이스 3-depth 마이그레이션 (agent/target → agent/channel/target)
+  migrateWorkspaceToChannelFolders();
 
   // 기존 스킬 폴더에 누락된 prompt.txt, GUIDE.md 생성
   for (const cs of listCustomSkills()) {
@@ -378,18 +376,26 @@ async function main(): Promise<void> {
       listManagedChannels: () => listManagedChannels(),
       createManagedChannel: (input) => {
         const id = `channel-${Date.now().toString(36)}`;
+        const folderName = toFolderSlug(
+          `${input.type}-${input.name || 'channel'}`,
+        );
         createManagedChannel({
           id,
           type: input.type,
           name: input.name,
           configJson: JSON.stringify(input.config || {}),
           status: 'configured',
+          folderName,
           thumbnail: pickRandom(THUMBS_CHANNEL),
         });
+        registerFolderName(id, folderName);
         return id;
       },
       updateManagedChannel: (id, updates) => {
-        updateManagedChannel(id, { name: updates.name });
+        updateManagedChannel(id, {
+          name: updates.name,
+          autoSession: updates.autoSession,
+        });
       },
       deleteManagedChannel: (id) => {
         deleteManagedChannel(id);
@@ -410,10 +416,64 @@ async function main(): Promise<void> {
             status: 'active',
           });
 
-          // Connect the channel immediately
           await connectChannel(channelId);
-
           return { success: true, botUsername: info.username };
+        } catch (err) {
+          return {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      },
+
+      pairDiscordBot: async (channelId: string, botToken: string) => {
+        try {
+          const info = await verifyDiscordBot(botToken);
+          if (!info) return { success: false, error: 'Invalid Discord bot token' };
+
+          updateManagedChannel(channelId, {
+            configJson: JSON.stringify({
+              botToken,
+              botId: info.id,
+              botUsername: info.username,
+            }),
+            pairingStatus: 'paired',
+            status: 'active',
+          });
+
+          await connectChannel(channelId);
+          return { success: true, botUsername: info.username };
+        } catch (err) {
+          return {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      },
+
+      pairSlackBot: async (
+        channelId: string,
+        botToken: string,
+        appToken: string,
+      ) => {
+        try {
+          const info = await verifySlackBot(botToken, appToken);
+          if (!info) return { success: false, error: 'Invalid Slack tokens' };
+
+          updateManagedChannel(channelId, {
+            configJson: JSON.stringify({
+              botToken,
+              appToken,
+              botUserId: info.userId,
+              botName: info.botName,
+              teamName: info.teamName,
+            }),
+            pairingStatus: 'paired',
+            status: 'active',
+          });
+
+          await connectChannel(channelId);
+          return { success: true, botUsername: info.botName };
         } catch (err) {
           return {
             success: false,
@@ -437,6 +497,7 @@ async function main(): Promise<void> {
           targetId: input.targetId,
           nickname: input.nickname,
           platform: input.platform,
+          targetType: input.targetType,
           thumbnail: pickRandom(THUMBS_TARGET),
         });
         return id;
@@ -451,6 +512,13 @@ async function main(): Promise<void> {
       // Services
       listServices: () => listServices(),
       createService: (input) => {
+        const mc = getManagedChannelById(input.channelId);
+        const tg = getTargetById(input.targetId);
+        if (mc && tg && mc.type !== tg.platform) {
+          throw new Error(
+            `Channel type "${mc.type}" does not match target platform "${tg.platform}"`,
+          );
+        }
         const id = `svc-${Date.now().toString(36)}`;
         createService({
           id,
