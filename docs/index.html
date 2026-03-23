@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agent Salad — Your AI Agent, Your Rules</title>
-<meta name="description" content="Run your own AI agent on a spare computer. Three steps. No coding required. Mac, Windows, Linux.">
+<meta name="description" content="Run your own AI agent on a spare computer. Three steps. No coding required. macOS — Windows & Linux coming soon.">
 <meta property="og:title" content="Agent Salad — Your AI Agent, Your Rules">
 <meta property="og:description" content="Create an agent, connect a channel, add a target. That's it.">
 <meta property="og:type" content="website">
@@ -67,13 +67,17 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 .step p{font-size:14px;color:var(--text-2);line-height:1.6}
 
 /* Use cases */
-.uses-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
-@media(max-width:768px){.uses-grid{grid-template-columns:1fr}}
-.use-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;transition:border-color .2s}
+.uses-grid{display:grid;grid-template-columns:1fr;gap:24px}
+.use-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px;transition:border-color .2s}
 .use-card:hover{border-color:var(--green)}
-.use-icon{font-size:28px;margin-bottom:12px}
-.use-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
-.use-card p{font-size:14px;color:var(--text-2);line-height:1.6}
+.use-top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.use-icon{font-size:28px;flex-shrink:0}
+.use-top h3{font-size:18px;font-weight:700}
+.use-top .use-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;background:var(--green-light);color:var(--green-dark)}
+.use-card p{font-size:15px;color:var(--text-2);line-height:1.7;margin-bottom:12px}
+.use-card p:last-child{margin-bottom:0}
+.use-detail{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.use-tag{font-size:12px;font-weight:500;padding:4px 12px;border-radius:6px;background:var(--bg);color:var(--text-2);border:1px solid var(--border)}
 
 /* Skills */
 .skills-section{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
@@ -89,12 +93,6 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 .custom-highlight{background:var(--accent);border:1px dashed var(--green);border-radius:var(--radius);padding:24px;margin-top:16px}
 .custom-highlight p{font-size:14px;color:var(--text-2);line-height:1.7}
 .custom-highlight code{background:var(--green-light);padding:2px 6px;border-radius:4px;font-size:13px;color:var(--green-dark)}
-
-/* Philosophy */
-.philosophy{text-align:center;max-width:640px;margin:0 auto}
-.philosophy blockquote{font-size:clamp(20px,3vw,28px);font-weight:600;line-height:1.4;letter-spacing:-.01em;margin-bottom:16px;color:var(--text)}
-.philosophy blockquote em{font-style:normal;color:var(--green)}
-.philosophy p{font-size:15px;color:var(--text-2)}
 
 /* Download */
 .download-section{background:var(--green);color:#fff;text-align:center}
@@ -211,7 +209,7 @@ footer a:hover{color:var(--text)}
         GitHub
       </a>
     </div>
-    <p class="hero-note">macOS · Windows · Linux — No coding required</p>
+    <p class="hero-note">macOS (Apple Silicon) — Windows &amp; Linux coming soon</p>
   </div>
 </section>
 
@@ -388,29 +386,90 @@ footer a:hover{color:var(--text)}
 <!-- Use cases -->
 <section id="use-cases">
   <div class="container">
-    <div class="section-label">What you can do</div>
-    <div class="section-title">Your agent, everywhere.</div>
+    <div class="section-label">Use cases</div>
+    <div class="section-title">Real examples. Real people.</div>
     <div class="uses-grid">
+
       <div class="use-card">
-        <div class="use-icon">👨‍👩‍👧</div>
-        <h3>Family Agent</h3>
-        <p>Make an agent for your parents. Private DM, simple and personal. They just talk to a bot — no setup on their end.</p>
+        <div class="use-top">
+          <div class="use-icon">🧑‍💻</div>
+          <h3>Personal AI — Just for Me</h3>
+          <span class="use-badge">Telegram DM</span>
+        </div>
+        <p>Connect your own Telegram bot, add yourself as the target, done. A private AI assistant that lives in your pocket. Ask questions, save notes, get daily briefings — all in a chat window you already have open.</p>
+        <p>Set up a cron to send you a morning news summary at 8am, or an evening journal prompt at 10pm. Your agent remembers context across conversations, reads/writes files in your personal workspace, and browses the web on your behalf.</p>
+        <div class="use-detail">
+          <span class="use-tag">1 Agent + 1 Channel + 1 Target</span>
+          <span class="use-tag">Cron scheduling</span>
+          <span class="use-tag">Web browsing</span>
+          <span class="use-tag">File workspace</span>
+        </div>
       </div>
+
       <div class="use-card">
-        <div class="use-icon">💬</div>
-        <h3>Community AI</h3>
-        <p>Drop an agent into your Discord server or Slack workspace. Everyone in the channel gets instant AI access.</p>
+        <div class="use-top">
+          <div class="use-icon">🔧</div>
+          <h3>Custom Skills — Infinite Extensions</h3>
+          <span class="use-badge">Any Channel</span>
+        </div>
+        <p>Write a <code>run.sh</code> script, define input parameters, and your agent gains a brand new tool. No framework, no SDK — just stdin JSON in, stdout JSON out. Connect external APIs, query your database, trigger CI/CD pipelines, control IoT devices.</p>
+        <p>Example: a "deploy" skill that SSHs into your server, pulls the latest code, and reports the result back to chat. Or a "stock-check" skill that fetches real-time prices and alerts you when a threshold is crossed. The agent decides when to use each skill based on conversation context.</p>
+        <div class="use-detail">
+          <span class="use-tag">Shell scripts</span>
+          <span class="use-tag">JSON I/O</span>
+          <span class="use-tag">Prompt-only skills</span>
+          <span class="use-tag">Per-agent toggle</span>
+        </div>
       </div>
+
       <div class="use-card">
-        <div class="use-icon">📋</div>
-        <h3>Team Workspace</h3>
-        <p>Shared folders let team members collaborate through the agent. Collect tasks, share files, stay in sync — organically.</p>
+        <div class="use-top">
+          <div class="use-icon">🏫</div>
+          <h3>Teacher → Students — Check-ins &amp; Quizzes</h3>
+          <span class="use-badge">Telegram Group</span>
+        </div>
+        <p>A teacher creates an agent with educational prompts. Connect it to a Telegram group where students are members. The agent sends a "Did you get home safe?" check-in every afternoon via cron, collects responses, and logs them to a file.</p>
+        <p>On quiz days, the agent posts questions at scheduled times, evaluates each student's answer in real-time, and writes a summary report the teacher can review anytime. Students interact naturally in the group chat — no separate app needed.</p>
+        <div class="use-detail">
+          <span class="use-tag">Cron messages</span>
+          <span class="use-tag">Group target (Room)</span>
+          <span class="use-tag">File logging</span>
+          <span class="use-tag">Auto evaluation</span>
+        </div>
       </div>
+
       <div class="use-card">
-        <div class="use-icon">⏰</div>
-        <h3>Scheduled Operations</h3>
-        <p>Set up cron jobs for batch messaging, daily summaries, or recurring check-ins across all your targets at once.</p>
+        <div class="use-top">
+          <div class="use-icon">🎮</div>
+          <h3>Discord Community — AI for Your Server</h3>
+          <span class="use-badge">Discord</span>
+        </div>
+        <p>Drop an agent into your Discord server with auto-session enabled. Every channel member gets instant AI access — no per-user setup required. The agent auto-creates a service for each person who messages it.</p>
+        <p>Use it as a community FAQ bot, a game guide, a moderation assistant, or a creative writing partner. Each user gets their own conversation context while sharing the same channel. The agent can browse docs, fetch URLs, and respond with up-to-date information.</p>
+        <div class="use-detail">
+          <span class="use-tag">Auto-session</span>
+          <span class="use-tag">Per-user context</span>
+          <span class="use-tag">Web fetch</span>
+          <span class="use-tag">Zero user setup</span>
+        </div>
       </div>
+
+      <div class="use-card">
+        <div class="use-top">
+          <div class="use-icon">🏢</div>
+          <h3>Slack CEO Bot — Collect Requests &amp; Feedback</h3>
+          <span class="use-badge">Slack</span>
+        </div>
+        <p>The CEO sets up an agent as their representative in Slack. Team members DM the bot to submit requests, suggestions, or feedback. The agent categorizes each item, writes it to a structured file, and sends a daily digest to the CEO.</p>
+        <p>Employees get instant acknowledgment and can ask follow-up questions. The CEO reviews a clean summary instead of scrolling through dozens of messages. Sensitive topics stay in private DMs, while the agent handles triage and organization automatically.</p>
+        <div class="use-detail">
+          <span class="use-tag">Slack DM</span>
+          <span class="use-tag">File write (structured logs)</span>
+          <span class="use-tag">Cron digest</span>
+          <span class="use-tag">Auto categorization</span>
+        </div>
+      </div>
+
     </div>
   </div>
 </section>
@@ -452,17 +511,6 @@ footer a:hover{color:var(--text)}
   </div>
 </section>
 
-<!-- Philosophy -->
-<section id="philosophy">
-  <div class="container">
-    <div class="philosophy">
-      <div class="section-label">Philosophy</div>
-      <blockquote>"Running your own AI agent should be as normal as running your own <em>Wi-Fi router</em>."</blockquote>
-      <p>Not a luxury. Not a subscription. Just something you set up once and it works for you. One Node.js process, on a machine you already own. Your agent, your data, your rules.</p>
-    </div>
-  </div>
-</section>
-
 <!-- Download -->
 <section class="download-section" id="download">
   <div class="container">
@@ -472,16 +520,16 @@ footer a:hover{color:var(--text)}
     <div class="dl-buttons">
       <a href="https://github.com/terry-uu/agentsalad/releases/latest" class="btn btn-dl" id="dl-mac">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-        macOS
+        macOS (Apple Silicon)
       </a>
-      <a href="https://github.com/terry-uu/agentsalad/releases/latest" class="btn btn-dl" id="dl-win">
+      <span class="btn btn-dl" style="opacity:.45;cursor:default">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
-        Windows
-      </a>
-      <a href="https://github.com/terry-uu/agentsalad/releases/latest" class="btn btn-dl" id="dl-linux">
+        Windows — Coming Soon
+      </span>
+      <span class="btn btn-dl" style="opacity:.45;cursor:default">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.368 1.884 1.43.868.07 1.723-.26 2.456-.594.733-.34 1.395-.668 1.882-.667.665.003 1.025-.23 1.126-.492.1-.26-.03-.6-.313-.832-.56-.468-1.275-.564-1.122-1.202a.076.076 0 00.039-.128c.32-.642.089-1.534-.124-2.341-.263-1.063-.722-2.116-1.07-2.824-.348-.702-.625-1.456-.835-2.212-.21-.749-.353-1.505-.378-2.208-.012-.26-.008-.479.017-.627a.346.346 0 00.002-.107c-.147-3.466-3.197-6.327-7.018-6.327z"/></svg>
-        Linux
-      </a>
+        Linux — Coming Soon
+      </span>
     </div>
     <p class="dl-note">Or build from source: <a href="https://github.com/terry-uu/agentsalad" target="_blank">github.com/terry-uu/agentsalad</a></p>
   </div>
