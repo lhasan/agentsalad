@@ -132,11 +132,21 @@ describe('workspace paths use STORE_DIR', () => {
     ws.registerFolderName('skill-1', 'my-skill');
     const scriptPath = ws.ensureSkillScript('skill-1', 'my_tool');
 
-    expect(scriptPath.startsWith(path.join(tmpStore, 'skills', 'my-skill'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'run.sh'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'schema.json'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'prompt.txt'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'GUIDE.md'))).toBe(true);
+    expect(
+      scriptPath.startsWith(path.join(tmpStore, 'skills', 'my-skill')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'run.sh')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'schema.json')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'prompt.txt')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpStore, 'skills', 'my-skill', 'GUIDE.md')),
+    ).toBe(true);
   });
 });
 
@@ -187,9 +197,15 @@ describe('DB creates in STORE_DIR', () => {
       model: 'sonnet',
       system_prompt: 'You make salads.',
       skills: {
-        file_read: true, file_write: true, file_list: true,
-        web_fetch: true, web_browse: false, bash: true,
-        google_gmail: false, google_calendar: false, google_drive: false,
+        file_read: true,
+        file_write: true,
+        file_list: true,
+        web_fetch: true,
+        web_browse: false,
+        bash: true,
+        google_gmail: false,
+        google_calendar: false,
+        google_drive: false,
         cron: true,
       },
       folder_name: 'salad-master',
@@ -211,7 +227,7 @@ describe('DB creates in STORE_DIR', () => {
       thumbnail: '🥬',
     });
     const channels = db.listManagedChannels();
-    expect(channels.find(c => c.id === 'ch-tg')).toBeDefined();
+    expect(channels.find((c) => c.id === 'ch-tg')).toBeDefined();
 
     db.createManagedChannel({
       id: 'ch-dc',
@@ -280,14 +296,24 @@ describe('DB creates in STORE_DIR', () => {
 
     // Conversations (30개 더미 메시지)
     const messages = [
-      '안녕하세요!', '오늘 뭐 먹을까?', '샐러드 추천해줘',
-      '시저 샐러드 어때?', '좋아! 만들어줘', '재료: 로메인, 파마산, 크루통...',
-      '드레싱은?', '시저 드레싱: 앤초비, 레몬, 올리브오일...', '감사합니다!',
-      '다음엔 그릭 샐러드', '재료 알려줘', '오이, 토마토, 올리브, 페타 치즈...',
-      '맛있겠다', '해보고 알려줄게', '기대됩니다!',
+      '안녕하세요!',
+      '오늘 뭐 먹을까?',
+      '샐러드 추천해줘',
+      '시저 샐러드 어때?',
+      '좋아! 만들어줘',
+      '재료: 로메인, 파마산, 크루통...',
+      '드레싱은?',
+      '시저 드레싱: 앤초비, 레몬, 올리브오일...',
+      '감사합니다!',
+      '다음엔 그릭 샐러드',
+      '재료 알려줘',
+      '오이, 토마토, 올리브, 페타 치즈...',
+      '맛있겠다',
+      '해보고 알려줄게',
+      '기대됩니다!',
     ];
     for (let i = 0; i < messages.length; i++) {
-      const role = i % 2 === 0 ? 'user' as const : 'assistant' as const;
+      const role = i % 2 === 0 ? ('user' as const) : ('assistant' as const);
       db.addConversationMessage('svc-terry-dm', role, messages[i]);
     }
     const history = db.getConversationHistory('svc-terry-dm', 50);
@@ -302,7 +328,9 @@ describe('DB creates in STORE_DIR', () => {
       description: 'Check weather for a location',
       prompt: 'Use weather_check when user asks about weather.',
       script: 'curl -s wttr.in/$INPUT_LOCATION?format=3',
-      input_schema: JSON.stringify([{ name: 'location', type: 'string', description: 'City name' }]),
+      input_schema: JSON.stringify([
+        { name: 'location', type: 'string', description: 'City name' },
+      ]),
       tool_name: 'weather_check',
       timeout_ms: 15000,
       folder_name: 'weather-checker',
@@ -342,8 +370,16 @@ describe('DB creates in STORE_DIR', () => {
       scheduleTime: '2030-01-15T14:00:00',
       notify: true,
     });
-    db.attachCronToService('svc-terry-dm', 'cron-morning', '2030-01-01T08:00:00.000Z');
-    db.attachCronToService('svc-terry-dm', 'cron-once', '2030-01-15T14:00:00.000Z');
+    db.attachCronToService(
+      'svc-terry-dm',
+      'cron-morning',
+      '2030-01-01T08:00:00.000Z',
+    );
+    db.attachCronToService(
+      'svc-terry-dm',
+      'cron-once',
+      '2030-01-15T14:00:00.000Z',
+    );
 
     const serviceCrons = db.getServiceCronsByService('svc-terry-dm');
     expect(serviceCrons.length).toBe(2);
@@ -404,14 +440,37 @@ describe('legacy store migration', () => {
 
   it('copies full directory tree from legacy to new location', () => {
     // 레거시 store 구조 구성
-    fs.mkdirSync(path.join(legacyStore, 'workspaces', 'agent-a', 'tg-bot', 'terry'), { recursive: true });
-    fs.mkdirSync(path.join(legacyStore, 'workspaces', 'agent-a', '_shared'), { recursive: true });
-    fs.mkdirSync(path.join(legacyStore, 'skills', 'weather-checker'), { recursive: true });
+    fs.mkdirSync(
+      path.join(legacyStore, 'workspaces', 'agent-a', 'tg-bot', 'terry'),
+      { recursive: true },
+    );
+    fs.mkdirSync(path.join(legacyStore, 'workspaces', 'agent-a', '_shared'), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(legacyStore, 'skills', 'weather-checker'), {
+      recursive: true,
+    });
 
     fs.writeFileSync(path.join(legacyStore, 'messages.db'), 'FAKE_SQLITE_DATA');
-    fs.writeFileSync(path.join(legacyStore, 'workspaces', 'agent-a', 'tg-bot', 'terry', 'notes.txt'), 'My notes');
-    fs.writeFileSync(path.join(legacyStore, 'workspaces', 'agent-a', '_shared', 'config.json'), '{"key":"value"}');
-    fs.writeFileSync(path.join(legacyStore, 'skills', 'weather-checker', 'run.sh'), '#!/bin/bash\necho hello');
+    fs.writeFileSync(
+      path.join(
+        legacyStore,
+        'workspaces',
+        'agent-a',
+        'tg-bot',
+        'terry',
+        'notes.txt',
+      ),
+      'My notes',
+    );
+    fs.writeFileSync(
+      path.join(legacyStore, 'workspaces', 'agent-a', '_shared', 'config.json'),
+      '{"key":"value"}',
+    );
+    fs.writeFileSync(
+      path.join(legacyStore, 'skills', 'weather-checker', 'run.sh'),
+      '#!/bin/bash\necho hello',
+    );
 
     // 마이그레이션 실행
     fs.mkdirSync(newStore, { recursive: true });
@@ -419,13 +478,44 @@ describe('legacy store migration', () => {
 
     // 검증: 모든 파일이 새 위치에 복사됨
     expect(fs.existsSync(path.join(newStore, 'messages.db'))).toBe(true);
-    expect(fs.readFileSync(path.join(newStore, 'messages.db'), 'utf-8')).toBe('FAKE_SQLITE_DATA');
+    expect(fs.readFileSync(path.join(newStore, 'messages.db'), 'utf-8')).toBe(
+      'FAKE_SQLITE_DATA',
+    );
 
-    expect(fs.existsSync(path.join(newStore, 'workspaces', 'agent-a', 'tg-bot', 'terry', 'notes.txt'))).toBe(true);
-    expect(fs.readFileSync(path.join(newStore, 'workspaces', 'agent-a', 'tg-bot', 'terry', 'notes.txt'), 'utf-8')).toBe('My notes');
+    expect(
+      fs.existsSync(
+        path.join(
+          newStore,
+          'workspaces',
+          'agent-a',
+          'tg-bot',
+          'terry',
+          'notes.txt',
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(
+          newStore,
+          'workspaces',
+          'agent-a',
+          'tg-bot',
+          'terry',
+          'notes.txt',
+        ),
+        'utf-8',
+      ),
+    ).toBe('My notes');
 
-    expect(fs.existsSync(path.join(newStore, 'workspaces', 'agent-a', '_shared', 'config.json'))).toBe(true);
-    expect(fs.existsSync(path.join(newStore, 'skills', 'weather-checker', 'run.sh'))).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(newStore, 'workspaces', 'agent-a', '_shared', 'config.json'),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(newStore, 'skills', 'weather-checker', 'run.sh')),
+    ).toBe(true);
   });
 
   it('does not overwrite existing files in new location', () => {
@@ -438,7 +528,9 @@ describe('legacy store migration', () => {
     copyDirRecursive(legacyStore, newStore);
 
     // 새 위치의 파일이 덮어쓰이지 않아야 함
-    expect(fs.readFileSync(path.join(newStore, 'messages.db'), 'utf-8')).toBe('NEW_DATA');
+    expect(fs.readFileSync(path.join(newStore, 'messages.db'), 'utf-8')).toBe(
+      'NEW_DATA',
+    );
   });
 
   it('skips migration when no legacy store exists', () => {
@@ -450,17 +542,38 @@ describe('legacy store migration', () => {
 
   it('handles deep nested workspace structure', () => {
     // 깊은 중첩: agent > channel > target > subfolder > file
-    const deepPath = path.join(legacyStore, 'workspaces', 'agent-b', 'dc-bot', 'general', 'reports', '2026');
+    const deepPath = path.join(
+      legacyStore,
+      'workspaces',
+      'agent-b',
+      'dc-bot',
+      'general',
+      'reports',
+      '2026',
+    );
     fs.mkdirSync(deepPath, { recursive: true });
-    fs.writeFileSync(path.join(deepPath, 'march.md'), '# March Report\nAll good.');
+    fs.writeFileSync(
+      path.join(deepPath, 'march.md'),
+      '# March Report\nAll good.',
+    );
     fs.writeFileSync(path.join(deepPath, 'data.csv'), 'a,b,c\n1,2,3');
 
     fs.mkdirSync(newStore, { recursive: true });
     copyDirRecursive(legacyStore, newStore);
 
-    const newDeepPath = path.join(newStore, 'workspaces', 'agent-b', 'dc-bot', 'general', 'reports', '2026');
+    const newDeepPath = path.join(
+      newStore,
+      'workspaces',
+      'agent-b',
+      'dc-bot',
+      'general',
+      'reports',
+      '2026',
+    );
     expect(fs.existsSync(path.join(newDeepPath, 'march.md'))).toBe(true);
-    expect(fs.readFileSync(path.join(newDeepPath, 'march.md'), 'utf-8')).toContain('March Report');
+    expect(
+      fs.readFileSync(path.join(newDeepPath, 'march.md'), 'utf-8'),
+    ).toContain('March Report');
     expect(fs.existsSync(path.join(newDeepPath, 'data.csv'))).toBe(true);
   });
 });

@@ -53,7 +53,7 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 .btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
 .btn-secondary:hover{border-color:var(--text-3);transform:translateY(-1px)}
 .btn svg{width:18px;height:18px}
-.hero-note{margin-top:16px;font-size:13px;color:var(--text-3)}
+.hero p.hero-note{margin-top:32px;font-size:13px;color:var(--text-3);max-width:none}
 
 /* Steps */
 .steps-section{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
@@ -105,70 +105,88 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 .dl-note{margin-top:20px;font-size:13px;color:rgba(255,255,255,.6)}
 .dl-note a{color:rgba(255,255,255,.8);text-decoration:underline}
 
-/* Preview mockup */
+/* Preview mockup — matches actual service UI */
 .preview-section{padding-bottom:0}
-.mockup-window{max-width:960px;margin:0 auto;border-radius:12px 12px 0 0;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.12),0 0 0 1px rgba(0,0,0,.06);background:var(--surface)}
-.mockup-bar{height:36px;background:#f5f5f4;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px}
-.mockup-dot{width:10px;height:10px;border-radius:50%}
-.mockup-dot.r{background:#ef4444}.mockup-dot.y{background:#eab308}.mockup-dot.g{background:#22c55e}
-.mockup-url{flex:1;margin-left:12px;background:#fff;border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:11px;color:var(--text-3);font-family:'Inter',monospace}
-.mockup-body{display:flex;height:420px;overflow:hidden}
-@media(max-width:768px){.mockup-body{height:340px}}
-@media(max-width:480px){.mockup-body{height:280px;flex-direction:column}}
+.mk{max-width:960px;margin:0 auto;border-radius:12px 12px 0 0;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.12),0 0 0 1px rgba(0,0,0,.06);background:var(--surface)}
+.mk-bar{height:36px;background:#f5f5f4;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px}
+.mk-dot{width:10px;height:10px;border-radius:50%}
+.mk-dot.r{background:#ef4444}.mk-dot.y{background:#eab308}.mk-dot.g{background:#22c55e}
+.mk-title{flex:1;text-align:center;font-size:11px;font-weight:600;color:var(--text-2)}
+.mk-body{display:flex;height:460px;overflow:hidden;position:relative}
+@media(max-width:768px){.mk-body{height:380px}}
+@media(max-width:480px){.mk-body{height:300px}}
+.mk-body::after{display:none}
 
-/* Mockup sidebar */
-.m-sidebar{width:200px;background:#fafaf9;border-right:1px solid var(--border);padding:14px 10px;flex-shrink:0;display:flex;flex-direction:column;gap:16px}
-@media(max-width:640px){.m-sidebar{width:150px;padding:10px 8px}}
-@media(max-width:480px){.m-sidebar{display:none}}
-.m-tab{display:flex;gap:4px;margin-bottom:4px}
-.m-tab-btn{padding:5px 10px;border-radius:6px;font-size:10px;font-weight:600;border:none;cursor:default}
-.m-tab-btn.active{background:var(--green-light);color:var(--green-dark)}
-.m-tab-btn.inactive{background:transparent;color:var(--text-3)}
-.m-sec{margin-bottom:2px}
-.m-sec-title{font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding:0 4px}
-.m-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:5px;cursor:default;transition:border-color .2s}
-.m-card:hover{border-color:var(--green)}
-.m-card-name{font-size:11px;font-weight:600;color:var(--text)}
-.m-card-sub{font-size:9px;color:var(--text-3);margin-top:1px}
-.m-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:8px;font-weight:700;margin-left:4px}
-.m-badge-tg{background:#e0f2fe;color:#0284c7}
-.m-badge-dc{background:#ede9fe;color:#7c3aed}
-.m-badge-sk{background:#fef3c7;color:#d97706}
+/* Sidebar */
+.mk-side{width:210px;background:#fff;border-right:1px solid var(--border);padding:14px 12px;flex-shrink:0;overflow-y:auto}
+@media(max-width:640px){.mk-side{width:160px;padding:10px 8px}}
+@media(max-width:480px){.mk-side{display:none}}
+.mk-logo{font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px;display:flex;align-items:center;gap:6px}
+.mk-logo em{font-style:normal;color:var(--green)}
+.mk-sec{margin-bottom:12px}
+.mk-sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.mk-sec-name{font-size:11px;font-weight:700;color:var(--green)}
+.mk-sec-add{font-size:8px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--bg);color:var(--text-3);border:1px solid var(--border)}
+.mk-item{padding:7px 10px;border-radius:6px;margin-bottom:3px;cursor:default;transition:background .15s}
+.mk-item:hover{background:var(--bg)}
+.mk-item-name{font-size:10px;font-weight:600;color:var(--text)}
+.mk-item-sub{font-size:8px;color:var(--text-3);margin-top:1px}
+.mk-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:7px;font-weight:700;margin-left:4px;vertical-align:middle}
+.mk-badge-tg{background:#e0f2fe;color:#0284c7}
+.mk-badge-dc{background:#ede9fe;color:#7c3aed}
+.mk-badge-sk{background:#fef3c7;color:#d97706}
 
-/* Mockup main */
-.m-main{flex:1;padding:16px 20px;overflow:hidden;display:flex;flex-direction:column;gap:14px}
-@media(max-width:640px){.m-main{padding:12px 14px;gap:10px}}
-.m-header{display:flex;align-items:center;justify-content:space-between}
-.m-header h2{font-size:14px;font-weight:700}
-.m-header-btns{display:flex;gap:6px}
-.m-hbtn{padding:4px 10px;border-radius:6px;font-size:9px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text-2);cursor:default}
+/* Main area */
+.mk-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.mk-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border);padding:0 16px;gap:0}
+.mk-tab{padding:10px 14px;font-size:10px;font-weight:600;color:var(--text-3);cursor:default;border-bottom:2px solid transparent;margin-bottom:-1px}
+.mk-tab.active{color:var(--text);border-bottom-color:var(--green)}
+.mk-tabs-right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.mk-tbtn{padding:3px 8px;border-radius:5px;font-size:8px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text-2);cursor:default}
+.mk-tbtn.danger{background:#fee2e2;color:#dc2626;border-color:#fecaca}
+.mk-content{flex:1;padding:16px 20px;overflow-y:auto}
+@media(max-width:640px){.mk-content{padding:12px 14px}}
+.mk-page-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.mk-page-desc{font-size:9px;color:var(--text-2);margin-bottom:14px}
+.mk-page-desc a{color:var(--green);font-weight:600;text-decoration:none}
 
-/* Make a Salad area */
-.m-salad-area{display:flex;gap:10px;align-items:stretch}
-@media(max-width:640px){.m-salad-area{gap:6px}}
-.m-drop{flex:1;border:2px dashed var(--border);border-radius:10px;padding:12px 8px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:72px;transition:all .3s}
-.m-drop.filled{border-color:var(--green);background:var(--accent)}
-.m-drop-icon{font-size:18px}
-.m-drop-label{font-size:9px;font-weight:600;color:var(--text-3)}
-.m-drop-val{font-size:10px;font-weight:600;color:var(--green-dark)}
-.m-salad-btn{padding:8px 16px;border-radius:8px;background:var(--green);color:#fff;font-size:11px;font-weight:700;border:none;cursor:default;align-self:center;white-space:nowrap;flex-shrink:0}
-.m-salad-arrow{font-size:16px;color:var(--text-3);align-self:center;flex-shrink:0}
+/* Service cards (matches actual UI: svc-wrap) */
+.mk-svc{border:1px solid var(--border);border-radius:8px;background:#fff;margin-bottom:8px;overflow:hidden}
+.mk-svc-row{display:flex;align-items:center;gap:8px;padding:8px 12px}
+.mk-svc-icon{font-size:16px;flex-shrink:0}
+.mk-svc-title{flex:1;font-size:9px;font-weight:400;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-svc-title .ag{color:#FF8C5A;font-weight:600}
+.mk-svc-title .ch{color:#43A047;font-weight:600}
+.mk-svc-title .tg{color:#F9A825;font-weight:600}
+.mk-svc-btns{display:flex;gap:4px;flex-shrink:0}
+.mk-svc-btns span{padding:2px 7px;border-radius:5px;font-size:7px;font-weight:600;cursor:default}
+.mk-svc-btns .pause{background:var(--bg);border:1px solid var(--border);color:var(--text-2)}
+.mk-svc-btns .del{background:#fee2e2;color:#dc2626}
+.mk-svc-targets{display:flex;gap:5px;padding:0 12px 6px;align-items:center;flex-wrap:wrap}
+.mk-svc-targets-label{font-size:7px;font-weight:700;color:#F9A825;letter-spacing:.02em}
+.mk-tg-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#fff;border:1px solid var(--border);border-left:2px solid #F9A825;border-radius:4px;font-size:7px;font-weight:500;color:var(--text)}
+.mk-tg-pill .tgn{color:#F9A825;font-weight:600}
+.mk-svc-crons{display:flex;gap:5px;padding:0 12px 8px;align-items:center;flex-wrap:wrap}
+.mk-svc-crons-label{font-size:7px;font-weight:700;color:#E91E63;letter-spacing:.02em}
+.mk-cron-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#fff;border:1px solid var(--border);border-left:2px solid #E91E63;border-radius:4px;font-size:7px;font-weight:500;color:var(--text)}
+.mk-cron-pill .cn{color:#E91E63;font-weight:600}
+.mk-cron-pill .cs{color:var(--text-3);font-size:6px}
 
-/* Service cards */
-.m-services{flex:1;overflow:hidden}
-.m-svc-title{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
-.m-svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media(max-width:640px){.m-svc-grid{grid-template-columns:1fr}}
-.m-svc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;position:relative}
-.m-svc-status{position:absolute;top:10px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--green)}
-.m-svc .m-card-name{font-size:11px;margin-bottom:3px}
-.m-svc-route{font-size:9px;color:var(--text-3);display:flex;align-items:center;gap:4px}
-.m-svc-route span{background:var(--green-light);color:var(--green-dark);padding:1px 5px;border-radius:3px;font-size:8px;font-weight:600}
-.m-svc-cron{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:9px;color:var(--text-2);display:flex;align-items:center;gap:4px}
-
-/* Fade out bottom */
-.mockup-body{position:relative}
-.mockup-body::after{content:'';position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,var(--surface));pointer-events:none}
+/* Make a Salad (composer) */
+.mk-maker-title{font-size:11px;font-weight:800;color:var(--green);margin-bottom:2px;letter-spacing:-.01em}
+.mk-maker-desc{font-size:8px;color:var(--text-3);margin-bottom:10px}
+.mk-slots{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px}
+.mk-slot{border-bottom:1px solid var(--border);padding:6px 4px;display:flex;align-items:center;gap:6px}
+.mk-slot.empty{border:1px dashed var(--border);border-radius:8px;justify-content:center;padding:10px 6px;flex-direction:column}
+.mk-slot-label{font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}
+.mk-slot-val{font-size:8px;color:var(--text-3)}
+.mk-slot-avatar{width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px}
+.mk-slot-body .mk-slot-name{font-size:9px;font-weight:600;color:var(--text)}
+.mk-slot-body .mk-slot-meta{font-size:7px;color:var(--text-3)}
+.mk-maker-btns{display:flex;gap:6px}
+.mk-maker-btn{padding:6px 14px;border-radius:6px;font-size:9px;font-weight:600;border:none;cursor:default;font-family:'Inter',sans-serif}
+.mk-maker-btn.primary{background:#FF6B35;color:#fff}
+.mk-maker-btn.secondary{background:var(--bg);color:var(--text-2);border:1px solid var(--border)}
 
 /* Footer */
 footer{padding:32px 0;text-align:center;font-size:13px;color:var(--text-3)}
@@ -220,136 +238,167 @@ footer a:hover{color:var(--text)}
       <div class="section-label">Preview</div>
       <div class="section-title">Visual UI. Zero config files.</div>
     </div>
-    <div class="mockup-window">
-      <div class="mockup-bar">
-        <div class="mockup-dot r"></div>
-        <div class="mockup-dot y"></div>
-        <div class="mockup-dot g"></div>
-        <div class="mockup-url">127.0.0.1:3210</div>
+    <div class="mk">
+      <div class="mk-bar">
+        <div class="mk-dot r"></div>
+        <div class="mk-dot y"></div>
+        <div class="mk-dot g"></div>
+        <div class="mk-title">Agent Salad</div>
       </div>
-      <div class="mockup-body">
+      <div class="mk-body">
         <!-- Sidebar -->
-        <div class="m-sidebar">
-          <div class="m-tab">
-            <div class="m-tab-btn active">My Salads</div>
-            <div class="m-tab-btn inactive">Skills</div>
-          </div>
+        <div class="mk-side">
+          <div class="mk-logo">Agent <em>Salad</em></div>
 
-          <div class="m-sec">
-            <div class="m-sec-title">Agents</div>
-            <div class="m-card">
-              <div class="m-card-name">English Tutor</div>
-              <div class="m-card-sub">Claude 4 Sonnet</div>
+          <div class="mk-sec">
+            <div class="mk-sec-head">
+              <div class="mk-sec-name">Agents</div>
+              <div class="mk-sec-add">+ Add</div>
             </div>
-            <div class="m-card">
-              <div class="m-card-name">News Curator</div>
-              <div class="m-card-sub">GPT-4o</div>
+            <div class="mk-item">
+              <div class="mk-item-name">English Tutor</div>
+              <div class="mk-item-sub">Claude 4 Sonnet</div>
             </div>
-            <div class="m-card">
-              <div class="m-card-name">Team Assistant</div>
-              <div class="m-card-sub">Gemini 2.5 Pro</div>
+            <div class="mk-item">
+              <div class="mk-item-name">News Curator</div>
+              <div class="mk-item-sub">GPT-4o</div>
             </div>
-          </div>
-
-          <div class="m-sec">
-            <div class="m-sec-title">Channels</div>
-            <div class="m-card">
-              <div class="m-card-name">My TG Bot <span class="m-badge m-badge-tg">TG</span></div>
-              <div class="m-card-sub">@myagent_bot</div>
-            </div>
-            <div class="m-card">
-              <div class="m-card-name">Team Discord <span class="m-badge m-badge-dc">DC</span></div>
-              <div class="m-card-sub">#ai-assistant</div>
-            </div>
-            <div class="m-card">
-              <div class="m-card-name">Work Slack <span class="m-badge m-badge-sk">SK</span></div>
-              <div class="m-card-sub">#general</div>
+            <div class="mk-item">
+              <div class="mk-item-name">Team Assistant</div>
+              <div class="mk-item-sub">Gemini 2.5 Pro</div>
             </div>
           </div>
 
-          <div class="m-sec">
-            <div class="m-sec-title">Targets</div>
-            <div class="m-card">
-              <div class="m-card-name">Terry</div>
-              <div class="m-card-sub">DM · Telegram</div>
+          <div class="mk-sec">
+            <div class="mk-sec-head">
+              <div class="mk-sec-name">Channels</div>
+              <div class="mk-sec-add">+ Add</div>
             </div>
-            <div class="m-card">
-              <div class="m-card-name">Mom</div>
-              <div class="m-card-sub">DM · Telegram</div>
+            <div class="mk-item" style="background:var(--green-light)">
+              <div class="mk-item-name">My TG Bot <span class="mk-badge mk-badge-tg">TG</span></div>
+              <div class="mk-item-sub">@myagent_bot</div>
             </div>
-            <div class="m-card">
-              <div class="m-card-name">#dev-team</div>
-              <div class="m-card-sub">Room · Discord</div>
+            <div class="mk-item">
+              <div class="mk-item-name">Team Discord <span class="mk-badge mk-badge-dc">DC</span></div>
+              <div class="mk-item-sub">#ai-assistant</div>
+            </div>
+          </div>
+
+          <div class="mk-sec">
+            <div class="mk-sec-head">
+              <div class="mk-sec-name">Targets</div>
+              <div class="mk-sec-add">+ Add</div>
+            </div>
+            <div class="mk-item">
+              <div class="mk-item-name">🥗 Everyone</div>
+              <div class="mk-item-sub">Telegram / Discord / Slack</div>
+            </div>
+          </div>
+
+          <div class="mk-sec">
+            <div class="mk-sec-head">
+              <div class="mk-sec-name">Cron</div>
+              <div class="mk-sec-add">+ Add</div>
+            </div>
+            <div class="mk-item">
+              <div class="mk-item-name">⏰ Morning lesson</div>
+              <div class="mk-item-sub">Daily 07:00</div>
+            </div>
+            <div class="mk-item">
+              <div class="mk-item-name">⏰ News briefing</div>
+              <div class="mk-item-sub">Daily 08:00</div>
             </div>
           </div>
         </div>
 
         <!-- Main -->
-        <div class="m-main">
-          <div class="m-header">
-            <h2>🥗 My Salads</h2>
-            <div class="m-header-btns">
-              <div class="m-hbtn">API Key Settings</div>
+        <div class="mk-main">
+          <div class="mk-tabs">
+            <div class="mk-tab active">My Salads</div>
+            <div class="mk-tab">Agents</div>
+            <div class="mk-tab">Skills</div>
+            <div class="mk-tab">Logs</div>
+            <div class="mk-tabs-right">
+              <div class="mk-tbtn">EN</div>
+              <div class="mk-tbtn">API Key Settings</div>
             </div>
           </div>
+          <div class="mk-content">
+            <div class="mk-page-title">My Salads</div>
+            <div class="mk-page-desc">Complete a salad and start chatting with your agents! <a href="#">How to use →</a></div>
 
-          <!-- Make a Salad -->
-          <div class="m-salad-area">
-            <div class="m-drop filled">
-              <div class="m-drop-icon">🤖</div>
-              <div class="m-drop-label">Agent</div>
-              <div class="m-drop-val">English Tutor</div>
+            <!-- Service card 1 -->
+            <div class="mk-svc">
+              <div class="mk-svc-row">
+                <div class="mk-svc-icon">🥗</div>
+                <div class="mk-svc-title"><span class="ag">English Tutor</span> → <span class="ch">My TG Bot</span> → <span class="tg">Terry</span></div>
+                <div class="mk-svc-btns"><span class="pause">Pause</span><span class="del">Del</span></div>
+              </div>
+              <div class="mk-svc-targets"><span class="mk-svc-targets-label">TARGET</span><span class="mk-tg-pill"><span class="tgn">Terry</span> ×</span></div>
+              <div class="mk-svc-crons"><span class="mk-svc-crons-label">CRONS</span><span class="mk-cron-pill"><span class="cn">Morning lesson</span> <span class="cs">Daily 07:00</span> ×</span></div>
             </div>
-            <div class="m-salad-arrow">+</div>
-            <div class="m-drop filled">
-              <div class="m-drop-icon">📡</div>
-              <div class="m-drop-label">Channel</div>
-              <div class="m-drop-val">My TG Bot</div>
-            </div>
-            <div class="m-salad-arrow">+</div>
-            <div class="m-drop filled">
-              <div class="m-drop-icon">👤</div>
-              <div class="m-drop-label">Target</div>
-              <div class="m-drop-val">Mom</div>
-            </div>
-            <div class="m-salad-arrow">→</div>
-            <div class="m-salad-btn">Make Salad</div>
-          </div>
 
-          <!-- Active services -->
-          <div class="m-services">
-            <div class="m-svc-title">Active Salads</div>
-            <div class="m-svc-grid">
-              <div class="m-svc">
-                <div class="m-svc-status"></div>
-                <div class="m-card-name">English Tutor → Terry</div>
-                <div class="m-svc-route">
-                  <span>TG</span> My TG Bot → DM
-                </div>
-                <div class="m-svc-cron">⏰ Daily 07:00 — Morning lesson</div>
+            <!-- Service card 2 -->
+            <div class="mk-svc">
+              <div class="mk-svc-row">
+                <div class="mk-svc-icon">🥗</div>
+                <div class="mk-svc-title"><span class="ag">News Curator</span> → <span class="ch">My TG Bot</span> → <span class="tg">Terry</span></div>
+                <div class="mk-svc-btns"><span class="pause">Pause</span><span class="del">Del</span></div>
               </div>
-              <div class="m-svc">
-                <div class="m-svc-status"></div>
-                <div class="m-card-name">News Curator → Terry</div>
-                <div class="m-svc-route">
-                  <span>TG</span> My TG Bot → DM
-                </div>
-                <div class="m-svc-cron">⏰ Daily 08:00 — News briefing</div>
+              <div class="mk-svc-targets"><span class="mk-svc-targets-label">TARGET</span><span class="mk-tg-pill"><span class="tgn">Terry</span> ×</span></div>
+              <div class="mk-svc-crons"><span class="mk-svc-crons-label">CRONS</span><span class="mk-cron-pill"><span class="cn">News briefing</span> <span class="cs">Daily 08:00</span> ×</span></div>
+            </div>
+
+            <!-- Service card 3 -->
+            <div class="mk-svc">
+              <div class="mk-svc-row">
+                <div class="mk-svc-icon">🥗</div>
+                <div class="mk-svc-title"><span class="ag">Team Assistant</span> → <span class="ch">Team Discord</span> → <span class="tg">#dev-team</span></div>
+                <div class="mk-svc-btns"><span class="pause">Pause</span><span class="del">Del</span></div>
               </div>
-              <div class="m-svc">
-                <div class="m-svc-status"></div>
-                <div class="m-card-name">Team Assistant → #dev-team</div>
-                <div class="m-svc-route">
-                  <span>DC</span> Team Discord → Room
+              <div class="mk-svc-targets"><span class="mk-svc-targets-label">TARGET</span><span class="mk-tg-pill"><span class="tgn">#dev-team</span> ×</span></div>
+              <div class="mk-svc-crons"><span class="mk-svc-crons-label">CRONS</span><span class="mk-cron-pill"><span class="cn">Standup reminder</span> <span class="cs">Weekdays 09:00</span> ×</span></div>
+            </div>
+
+            <!-- Service card 4 -->
+            <div class="mk-svc">
+              <div class="mk-svc-row">
+                <div class="mk-svc-icon">🥗</div>
+                <div class="mk-svc-title"><span class="ag">English Tutor</span> → <span class="ch">My TG Bot</span> → <span class="tg">Mom</span></div>
+                <div class="mk-svc-btns"><span class="pause">Pause</span><span class="del">Del</span></div>
+              </div>
+              <div class="mk-svc-targets"><span class="mk-svc-targets-label">TARGET</span><span class="mk-tg-pill"><span class="tgn">Mom</span> ×</span></div>
+              <div class="mk-svc-crons"><span class="mk-svc-crons-label">CRONS</span><span class="mk-cron-pill"><span class="cn">Evening practice</span> <span class="cs">Daily 20:00</span> ×</span></div>
+            </div>
+
+            <div class="mk-maker-title">Make a Salad</div>
+            <div class="mk-maker-desc">Drag from the left sidebar and drop into slots</div>
+            <div class="mk-slots">
+              <div class="mk-slot">
+                <div class="mk-slot-avatar">🤖</div>
+                <div class="mk-slot-body">
+                  <div class="mk-slot-name">English Tutor</div>
+                  <div class="mk-slot-meta">Claude 4 Sonnet</div>
                 </div>
               </div>
-              <div class="m-svc">
-                <div class="m-svc-status"></div>
-                <div class="m-card-name">English Tutor → Mom</div>
-                <div class="m-svc-route">
-                  <span>TG</span> My TG Bot → DM
+              <div class="mk-slot">
+                <div class="mk-slot-avatar">📡</div>
+                <div class="mk-slot-body">
+                  <div class="mk-slot-name">My TG Bot</div>
+                  <div class="mk-slot-meta">Telegram</div>
                 </div>
               </div>
+              <div class="mk-slot">
+                <div class="mk-slot-avatar">👤</div>
+                <div class="mk-slot-body">
+                  <div class="mk-slot-name">Mom</div>
+                  <div class="mk-slot-meta">DM · Telegram</div>
+                </div>
+              </div>
+            </div>
+            <div class="mk-maker-btns">
+              <div class="mk-maker-btn primary">Create Service</div>
+              <div class="mk-maker-btn secondary">Clear</div>
             </div>
           </div>
         </div>
@@ -551,7 +600,7 @@ footer a:hover{color:var(--text)}
 <!-- Footer -->
 <footer>
   <div class="container">
-    <p>Agent Salad · Made by terry-uu · <a href="https://discord.gg/agentsalad" target="_blank">Discord</a> · <a href="mailto:terry.youu@gmail.com">terry.youu@gmail.com</a></p>
+    <p>Agent Salad · Made by terry-uu · <a href="https://discord.gg/smtDTRH4" target="_blank">Discord</a> · <a href="mailto:terry.youu@gmail.com">terry.youu@gmail.com</a></p>
   </div>
 </footer>
 

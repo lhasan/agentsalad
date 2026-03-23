@@ -2663,7 +2663,9 @@ async function attachCronToServices(svcIds){
     const svc=(D.services||[]).find(s=>s.id===svcIds[0]);
     const ag=svc&&D.agentProfiles.find(a=>a.id===svc.agent_profile_id);
     if(ag){
-      const missing=hints.filter(h=>!ag.skills[h]);
+      const agentCS=await api('/api/agent-profiles/'+encodeURIComponent(ag.id)+'/custom-skills');
+      const enabledCustomIds=new Set((agentCS||[]).filter(s=>s.enabled).map(s=>s.tool_name||s.id));
+      const missing=hints.filter(h=>!ag.skills[h]&&!enabledCustomIds.has(h));
       if(missing.length){showAlert(t('missingSkills')+missing.join(', '));return}
     }
   }
@@ -2767,7 +2769,7 @@ async function renderCronSkillChecks(containerId,selected){
     const label=skillLabel(s.id)||s.name;
     const cat=skillCat(s.id)||s.cat;
     const desc=skillDesc(s.id)||'';
-    return '<div class="skill-toggle"><input type="checkbox" value="'+esc(s.name)+'"'+checked+'><label>'+esc(label)+(desc?'<div class="sk-desc">'+desc+'</div>':'')+'</label><span class="cat">'+esc(cat)+'</span></div>';
+    return '<div class="skill-toggle"><input type="checkbox" value="'+esc(s.id)+'"'+checked+'><label>'+esc(label)+(desc?'<div class="sk-desc">'+desc+'</div>':'')+'</label><span class="cat">'+esc(cat)+'</span></div>';
   }).join('')||'<span style="font-size:.68rem;color:var(--t3)">'+t('noSkills')+'</span>';
 }
 

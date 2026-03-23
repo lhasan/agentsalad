@@ -41,11 +41,7 @@ describe('computeOnceNextRun', () => {
 describe('mapConcurrent', () => {
   it('executes all items and returns results in order', async () => {
     const items = [1, 2, 3, 4, 5];
-    const results = await mapConcurrent(
-      items,
-      async (n) => n * 10,
-      3,
-    );
+    const results = await mapConcurrent(items, async (n) => n * 10, 3);
     expect(results).toEqual([10, 20, 30, 40, 50]);
   });
 
@@ -102,11 +98,7 @@ describe('mapConcurrent', () => {
 
   it('handles concurrency larger than items', async () => {
     const items = [1, 2];
-    const results = await mapConcurrent(
-      items,
-      async (n) => n + 1,
-      10,
-    );
+    const results = await mapConcurrent(items, async (n) => n + 1, 10);
     expect(results).toEqual([2, 3]);
   });
 
