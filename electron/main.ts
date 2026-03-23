@@ -6,7 +6,7 @@
  * 시스템 트레이로 백그라운드 동작 지원.
  * 앱 아이콘: build/icon.{icns,ico,png} — BrowserWindow + electron-builder 모두 적용.
  * 트레이 아이콘: 상태별 컬러 원형 — 원시 RGBA에서 PNG 직접 생성.
- * (SVG→nativeImage는 Electron이 디코딩 불가 → 빈 이미지 이슈 수정)
+ * 외부 링크: 127.0.0.1:3210 / file:// 외 URL은 시스템 브라우저로 열림.
  *
  * 동작:
  *  - X 버튼 → 창 숨김 (트레이에 유지, 서버 계속 동작)
@@ -17,6 +17,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  shell,
   Tray,
   Menu,
   nativeImage,
@@ -142,6 +143,26 @@ async function createWindow(): Promise<void> {
   } else {
     loadStatusPage();
   }
+
+  // 외부 링크: 앱 내부가 아닌 시스템 기본 브라우저에서 열기.
+  // 127.0.0.1:3210 (Web UI)과 상태 페이지(file://) 외 모든 URL을 외부로 보낸다.
+  const isInternalUrl = (url: string) =>
+    url.startsWith('http://127.0.0.1:3210') || url.startsWith('file://');
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (!isInternalUrl(url)) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (!isInternalUrl(url)) {
+      e.preventDefault();
+      shell.openExternal(url);
+    }
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
