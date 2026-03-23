@@ -7,11 +7,11 @@ Agent Salad의 빌드, 배포, 릴리스 워크플로우.
 | Remote | URL | 용도 |
 |--------|-----|------|
 | `origin` | `terry-uu/agentsalad-private` | 전체 소스 코드 (private) |
-| `public` | `terry-uu/agentsalad` | 릴리스 에셋 업로드 + 랜딩 페이지 (public) |
+| `public` | `terry-uu/agentsalad` | 릴리스 에셋 + 랜딩 페이지 (public) |
 
 - **소스 코드 푸시**: `origin` (private)에만 한다.
-- **퍼블릭 리포**: 릴리스 파일(.dmg, .zip) 업로드 전용. 코드 푸시하지 않는다.
-- **랜딩 페이지**: `docs/index.html` — public 리포의 GitHub Pages로 서빙.
+- **퍼블릭 리포**: 릴리스 파일(.dmg, .zip) 업로드 + `docs/` 랜딩 페이지 반영 전용. 소스 코드를 통째로 푸시하지 않는다.
+- **랜딩 페이지**: `docs/index.html` — public 리포의 GitHub Pages로 서빙. https://terry-uu.github.io/agentsalad/
 
 ## 빌드 & 패키징
 
@@ -39,15 +39,23 @@ npm run electron:build
 
 > `GH_TOKEN` 미설정 시 자동 업로드 단계에서 exit code 1이 나오지만, 빌드 자체는 성공한 것이다. 에셋 파일이 `release/`에 정상 생성되었는지만 확인하면 된다.
 
-## 릴리스 절차
+## 릴리스 절차 (전체 플로우)
 
-### Private 푸시
+**패키징하면 반드시 아래 전부를 수행한다.**
+
+### Step 1. Private 푸시
 
 ```bash
 git push origin fresh-main:main
 ```
 
-### Public 릴리스 에셋 교체
+### Step 2. Electron 패키징
+
+```bash
+npm run electron:build
+```
+
+### Step 3. Public 릴리스 에셋 교체
 
 기존 에셋 삭제 후 새 빌드 업로드:
 
@@ -63,6 +71,17 @@ gh release upload v{VERSION} \
   --repo terry-uu/agentsalad
 ```
 
+### Step 4. 랜딩 페이지 반영
+
+`docs/index.html`이 변경되었다면 public 리포에 반영한다. GitHub Pages가 자동으로 재배포한다.
+
+```bash
+# docs/index.html 변경분만 public에 푸시
+git push public fresh-main:main -- docs/
+```
+
+또는 변경 파일이 docs만이 아닌 경우, public 리포에서 직접 파일을 업로드한다.
+
 ### 새 버전 릴리스 생성 (버전 업 시)
 
 ```bash
@@ -75,11 +94,6 @@ gh release create v{VERSION} \
   --notes "릴리스 노트 내용"
 ```
 
-## 랜딩 페이지 업데이트
-
-`docs/index.html`은 public 리포의 GitHub Pages에서 서빙된다.
-랜딩 페이지 변경 시에는 public 리포에 해당 파일만 별도로 푸시하거나 수동 업로드한다.
-
 ## 환경별 운용
 
 | 환경 | 용도 | 비고 |
@@ -90,10 +104,12 @@ gh release create v{VERSION} \
 
 ## 체크리스트
 
+패키징 시 **전부 수행**:
+
 - [ ] TypeScript 빌드 성공 (`npm run build`)
 - [ ] 테스트 통과 (`npm test`)
 - [ ] Electron 패키징 성공 (`npm run electron:build`)
 - [ ] `release/` 디렉토리에 .dmg + .zip 생성 확인
-- [ ] private 리포 푸시
-- [ ] public 릴리스 에셋 교체
-- [ ] 랜딩 페이지 변경 시 public 리포 반영
+- [ ] private 리포 푸시 (`origin`)
+- [ ] public 릴리스 에셋 교체 (`gh release upload`)
+- [ ] 랜딩 페이지 변경 시 public 리포 반영 (GitHub Pages)
