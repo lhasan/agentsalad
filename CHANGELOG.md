@@ -4,7 +4,7 @@ All notable changes to Agent Salad will be documented in this file.
 
 ## [0.0.0] — Initial Release
 
-Fork of NanoClo rebuilt as a multi-provider AI agent service platform.
+Multi-provider AI agent service platform. Agent + Channel + Target = Service.
 
 ### Added
 - **Service Platform model**: Agent + Channel + Target = Service

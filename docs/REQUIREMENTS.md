@@ -1,9 +1,5 @@
 # Agent Salad — Design Decisions
 
-## Origin
-
-Fork of [NanoClo (AgentSalad)](https://github.com/qwibitai/agentsalad). The upstream project ran Claude agents in isolated Docker/Apple Container instances with IPC-based communication. This fork strips the container layer and replaces it with direct multi-provider LLM API calls via Vercel AI SDK, adding a Web UI for non-developer administration.
-
 ## Core Model
 
 **Agent + Channel + Target = Service.**

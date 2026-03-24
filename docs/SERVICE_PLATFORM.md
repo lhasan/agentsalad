@@ -2,7 +2,7 @@
 
 Full architecture reference for the Agent Salad service platform.
 
-Fork of [NanoClo (AgentSalad)](https://github.com/qwibitai/agentsalad), rebuilt as a multi-provider, multi-channel AI agent system with direct LLM API calls via Vercel AI SDK.
+Multi-provider, multi-channel AI agent system with direct LLM API calls via Vercel AI SDK.
 
 ---
 

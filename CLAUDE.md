@@ -1,6 +1,6 @@
 # Agent Salad — Service Platform
 
-Multi-provider AI agent platform served through messenger channels. Fork of [NanoClo (AgentSalad)](https://github.com/qwibitai/agentsalad), rebuilt with direct LLM API calls via Vercel AI SDK, Web UI, and a skills system.
+Multi-provider AI agent platform served through messenger channels. Direct LLM API calls via Vercel AI SDK, Web UI, and a skills system.
 
 See [docs/SERVICE_PLATFORM.md](docs/SERVICE_PLATFORM.md) for full architecture. See [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) for schema reference. See [docs/RELEASE.md](docs/RELEASE.md) for build & release workflow.
 
