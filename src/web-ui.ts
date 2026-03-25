@@ -3397,6 +3397,14 @@ export function startWebUiServer(
             google_drive: skills.google_drive === true,
             cron: skills.cron === true,
           },
+          timeAware:
+            typeof body.timeAware === 'boolean' ? body.timeAware : undefined,
+          smartStep:
+            typeof body.smartStep === 'boolean' ? body.smartStep : undefined,
+          maxPlanSteps:
+            typeof body.maxPlanSteps === 'number'
+              ? body.maxPlanSteps
+              : undefined,
         });
         sendJson(res, 200, { ok: true, id });
         return;

@@ -11,10 +11,8 @@
  * 서비스 크론: cron_jobs + service_crons 테이블로 예약 작업 지원.
  * 커스텀 스킬: custom_skills + agent_custom_skills로 스크립트 기반 스킬 관리.
  * 스마트 스텝: agent_profiles.smart_step/max_plan_steps + hasNewUserMessages() 인터럽트 감지.
- * 최근 수정: targets.folder_name을 추가해 자동 생성 타겟의 워크스페이스 경로를
- * 닉네임 변경과 분리된 안정 식별자로 유지한다.
- * 최근 수정: services.creation_source로 수동 생성과 everyone 템플릿 생성분을
- * 구분하고, legacy auto_session fallback은 폐기했다.
+ * createAgentProfile()이 time_aware, smart_step, max_plan_steps를 생성 시점에
+ * 함께 INSERT하도록 수정. 기존에는 생성 시 누락되어 기본값 0으로만 저장됨.
  */
 import Database from 'better-sqlite3';
 import fs from 'fs';
@@ -539,11 +537,17 @@ export function createAgentProfile(
     | 'model'
     | 'system_prompt'
     | 'skills'
-  > & { folder_name?: string; thumbnail?: string },
+  > & {
+    folder_name?: string;
+    thumbnail?: string;
+    time_aware?: number;
+    smart_step?: number;
+    max_plan_steps?: number;
+  },
 ): void {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO agent_profiles (id, name, description, provider_id, model, system_prompt, tools_json, folder_name, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO agent_profiles (id, name, description, provider_id, model, system_prompt, tools_json, folder_name, thumbnail, time_aware, smart_step, max_plan_steps, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     profile.id,
     profile.name,
@@ -554,6 +558,9 @@ export function createAgentProfile(
     JSON.stringify(normalizeSkillsJson(profile.skills)),
     profile.folder_name ?? null,
     profile.thumbnail ?? null,
+    profile.time_aware ?? 0,
+    profile.smart_step ?? 0,
+    profile.max_plan_steps ?? 10,
     now,
     now,
   );

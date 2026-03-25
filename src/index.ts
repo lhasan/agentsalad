@@ -392,6 +392,9 @@ async function main(): Promise<void> {
           skills: input.skills,
           folder_name: folderName,
           thumbnail: pickRandom(THUMBS_AGENT),
+          time_aware: input.timeAware ? 1 : 0,
+          smart_step: input.smartStep ? 1 : 0,
+          max_plan_steps: input.maxPlanSteps ?? 10,
         });
         registerFolderName(id, folderName);
         return id;
