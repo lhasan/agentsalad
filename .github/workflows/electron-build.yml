@@ -1,7 +1,7 @@
 # Electron 데스크톱 앱 빌드 + 릴리스 자동화
 #
 # main 푸시: macOS(arm64) + Windows(x64) 빌드 → Actions Artifacts
-# 태그 v* 푸시: 동일 빌드 → public 리포(terry-uu/agentsalad) 릴리스에 자동 업로드
+# 태그 v* 푸시: 동일 빌드 → public 리포(terry-uu/agentsalad) 릴리스 자동 생성 + 에셋 업로드
 #
 # 사전 준비: private 리포 Settings > Secrets에 PUBLIC_REPO_TOKEN 등록
 # (PAT, repo 스코프, public 리포 쓰기 권한)
@@ -105,6 +105,15 @@ jobs:
           REPO="terry-uu/agentsalad"
 
           echo "Uploading artifacts to $REPO release $TAG"
+
+          # 릴리스 없으면 자동 생성
+          if ! gh release view "$TAG" --repo "$REPO" &>/dev/null; then
+            echo "Release $TAG not found — creating"
+            gh release create "$TAG" --repo "$REPO" \
+              --title "$TAG" \
+              --notes "Release $TAG" \
+              --latest
+          fi
 
           # 기존 에셋 삭제 (존재하면). 없으면 무시.
           for asset in artifacts/mac/* artifacts/win/*; do

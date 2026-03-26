@@ -3965,9 +3965,7 @@ export function startWebUiServer(
         if (!name) throw new Error('name required');
         const rawType = String(body.scheduleType ?? '');
         const scheduleType: 'once' | 'weekly' | 'interval' =
-          rawType === 'once' || rawType === 'interval'
-            ? rawType
-            : 'weekly';
+          rawType === 'once' || rawType === 'interval' ? rawType : 'weekly';
         const scheduleTime =
           typeof body.scheduleTime === 'string' ? body.scheduleTime : '08:00';
         const intervalMinutes =

@@ -725,7 +725,10 @@ async function main(): Promise<void> {
             if (cron.schedule_type === 'weekly') {
               const days = parseScheduleDays(cron.schedule_days);
               nextRun = computeWeeklyNextRun(cron.schedule_time, days);
-            } else if (cron.schedule_type === 'interval' && cron.interval_minutes) {
+            } else if (
+              cron.schedule_type === 'interval' &&
+              cron.interval_minutes
+            ) {
               const startTime = new Date(cron.schedule_time);
               nextRun =
                 startTime.getTime() > Date.now()

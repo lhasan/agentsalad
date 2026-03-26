@@ -108,9 +108,7 @@ Always confirm what you created after calling the tool.`,
           .number()
           .min(5)
           .optional()
-          .describe(
-            'interval only: repeat every N minutes (minimum 5)',
-          ),
+          .describe('interval only: repeat every N minutes (minimum 5)'),
         notify: z
           .boolean()
           .default(true)
@@ -136,8 +134,7 @@ Always confirm what you created after calling the tool.`,
           !/^\d{2}:\d{2}$/.test(schedule_time)
         ) {
           return {
-            error:
-              'weekly schedule_time must be HH:MM format (e.g. "09:00")',
+            error: 'weekly schedule_time must be HH:MM format (e.g. "09:00")',
           };
         }
 
@@ -151,8 +148,7 @@ Always confirm what you created after calling the tool.`,
           const days = parseScheduleDays(schedule_days);
           if (days.length === 0) {
             return {
-              error:
-                'schedule_days must contain at least one valid day (0-6)',
+              error: 'schedule_days must contain at least one valid day (0-6)',
             };
           }
         }

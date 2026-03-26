@@ -62,7 +62,7 @@ export function computeWeeklyNextRun(
 
   // fallback: 다음 주 첫 매칭 요일 (위 루프에서 반드시 걸리지만 안전장치)
   const sorted = [...days].sort((a, b) => a - b);
-  const daysUntil = ((sorted[0] - currentDay + 7) % 7) || 7;
+  const daysUntil = (sorted[0] - currentDay + 7) % 7 || 7;
   const fallback = new Date(now);
   fallback.setDate(now.getDate() + daysUntil);
   fallback.setHours(h, m, 0, 0);
@@ -109,9 +109,7 @@ function buildScheduleLabel(
   if (type === 'weekly') {
     const days = parseScheduleDays(scheduleDays);
     const dayStr =
-      days.length === 7
-        ? '매일'
-        : days.map((d) => DAY_LABELS[d]).join(',');
+      days.length === 7 ? '매일' : days.map((d) => DAY_LABELS[d]).join(',');
     return `${dayStr} ${time}`;
   }
   if (type === 'interval' && intervalMinutes) {
