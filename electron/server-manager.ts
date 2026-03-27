@@ -14,10 +14,15 @@
  * 설정하여 앱 번들 외부에 DB/워크스페이스를 저장. 앱 업데이트 시에도 데이터 보존.
  * 레거시 데이터(앱 번들 내 store/)가 있으면 자동 마이그레이션.
  *
+ * ABI 호환성: node_modules 설치 시 .node-abi 마커 파일에 NODE_MODULE_VERSION 기록.
+ * 다음 시작 시 현재 Node.js의 ABI와 비교하여 불일치하면 node_modules 삭제 후 재설치.
+ * 이전 버전에서 시스템 Node.js로 설치된 모듈을 번들 Node.js로 실행할 때 발생하는
+ * "was compiled against a different Node.js version" 크래시 방지.
+ *
  * 상태 흐름:
  *   stopped → (start)
- *     → checking   : PATH 복원 + Node.js 감지 + 데이터 마이그레이션
- *     → installing : npm install --production (node_modules 없을 때)
+ *     → checking   : PATH 복원 + Node.js 감지 + ABI 체크 + 데이터 마이그레이션
+ *     → installing : npm install --production (node_modules 없거나 ABI 불일치)
  *     → starting   : 서버 프로세스 spawn + health check
  *     → running    : 서버 정상 가동
  *     → error      : 어느 단계든 실패
@@ -43,6 +48,7 @@ const HEALTH_TIMEOUT_MS = 60_000;
 const INSTALL_TIMEOUT_MS = 300_000;
 const GRACEFUL_KILL_MS = 3_000;
 const LOG_BUFFER_MAX = 300;
+const ABI_MARKER_FILE = '.node-abi';
 
 export class ServerManager extends EventEmitter {
   private process: ChildProcess | null = null;
@@ -240,10 +246,10 @@ export class ServerManager extends EventEmitter {
       // 1.5) 레거시 데이터 마이그레이션 (앱 번들 내 → userData)
       this.migrateStoreIfNeeded();
 
-      // 2) node_modules 없으면 설치
+      // 2) node_modules 없거나 ABI 불일치 시 설치
       const appRoot = this.getAppRoot();
-      const modulesDir = path.join(appRoot, 'node_modules');
-      if (!fs.existsSync(modulesDir)) {
+      const needsInstall = await this.checkNeedsInstall(appRoot, env);
+      if (needsInstall) {
         this.setStatus('installing');
         await this.runNpmInstall(appRoot, env);
       }
@@ -348,6 +354,80 @@ export class ServerManager extends EventEmitter {
     });
   }
 
+  /** process.versions.modules (NODE_MODULE_VERSION) 조회 */
+  private getNodeABI(nodePath: string, env: Record<string, string>): Promise<string | null> {
+    return new Promise((resolve) => {
+      const child = spawn(nodePath, ['-e', 'console.log(process.versions.modules)'], {
+        stdio: 'pipe',
+        env,
+      });
+      let abi = '';
+      child.stdout?.on('data', (d: Buffer) => { abi += d.toString().trim(); });
+      child.on('error', () => resolve(null));
+      child.on('exit', (code) => resolve(code === 0 && abi ? abi : null));
+    });
+  }
+
+  // ── ABI 호환성 체크 ──────────────────────────────────────
+
+  /**
+   * node_modules 설치 필요 여부 판단.
+   * 1) node_modules 없음 → 설치 필요
+   * 2) node_modules 있으나 .node-abi 마커 없음 → 이전 버전 잔재, 재설치
+   * 3) .node-abi와 현재 Node ABI 불일치 → native module ABI 불일치, 재설치
+   */
+  private async checkNeedsInstall(appRoot: string, env: Record<string, string>): Promise<boolean> {
+    const modulesDir = path.join(appRoot, 'node_modules');
+    const abiFile = path.join(appRoot, ABI_MARKER_FILE);
+
+    if (!fs.existsSync(modulesDir)) {
+      return true;
+    }
+
+    const nodePath = this.resolvedNodePath || 'node';
+    const currentABI = await this.getNodeABI(nodePath, env);
+    if (!currentABI) {
+      this.appendLog('[setup] Could not determine Node.js ABI, reinstalling to be safe');
+      this.purgeNodeModules(modulesDir, abiFile);
+      return true;
+    }
+
+    let savedABI: string | null = null;
+    try {
+      savedABI = fs.readFileSync(abiFile, 'utf-8').trim();
+    } catch {
+      // 마커 파일 없음 = 이전 버전에서 설치된 node_modules
+    }
+
+    if (savedABI !== currentABI) {
+      this.appendLog(
+        savedABI
+          ? `[setup] Node ABI changed (${savedABI} → ${currentABI}), reinstalling native modules...`
+          : `[setup] No ABI marker found, reinstalling to ensure compatibility...`,
+      );
+      this.purgeNodeModules(modulesDir, abiFile);
+      return true;
+    }
+
+    this.appendLog(`[setup] node_modules ABI matches (${currentABI}), skipping install`);
+    return false;
+  }
+
+  private purgeNodeModules(modulesDir: string, abiFile: string): void {
+    try {
+      fs.rmSync(modulesDir, { recursive: true, force: true });
+      this.appendLog('[setup] Removed stale node_modules');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.appendLog(`[setup] Failed to remove node_modules: ${msg}`);
+    }
+    try {
+      fs.unlinkSync(abiFile);
+    } catch {
+      // 없으면 무시
+    }
+  }
+
   // ── npm install ───────────────────────────────────────────
 
   /**
@@ -425,6 +505,7 @@ export class ServerManager extends EventEmitter {
           clearTimeout(timer);
           if (code === 0) {
             this.appendLog('[setup] Dependencies installed successfully.');
+            this.writeABIMarker(appRoot, env);
             resolve();
           } else {
             reject(new Error(`npm install exited with code ${code}`));
@@ -432,6 +513,20 @@ export class ServerManager extends EventEmitter {
         }
       });
     });
+  }
+
+  /** 설치 완료 후 현재 Node ABI를 마커 파일에 기록 */
+  private async writeABIMarker(appRoot: string, env: Record<string, string>): Promise<void> {
+    const nodePath = this.resolvedNodePath || 'node';
+    const abi = await this.getNodeABI(nodePath, env);
+    if (abi) {
+      try {
+        fs.writeFileSync(path.join(appRoot, ABI_MARKER_FILE), abi, 'utf-8');
+        this.appendLog(`[setup] ABI marker written: ${abi}`);
+      } catch {
+        // non-critical
+      }
+    }
   }
 
   // ── 서버 프로세스 spawn ───────────────────────────────────
