@@ -33,7 +33,7 @@ npm run electron:build
 1. `npm run build` — TypeScript 컴파일
 2. `npm run build:electron` — Electron 코드 컴파일 (`electron/` → `dist-electron/`)
 3. `npm run electron:node` — 번들용 Node.js 풀 배포판 다운로드 (`build/node/`)
-4. `npm run electron:prepare` — `build/app-server-pkg/package.json` 생성 (런타임 의존성만 추출)
+4. `npm run electron:prepare` — `build/app-server-pkg/` 에 package.json 생성 + 번들 Node.js로 `npm install` 실행 (node_modules 프리번들)
 5. `electron-builder` — 플랫폼별 인스톨러 생성 → `release/` 디렉토리
 
 빌드 결과물:
@@ -89,7 +89,7 @@ Remove-Item "$cacheDir\winCodeSign-2.6.0.7z"
 1. `npm run build` — TypeScript 컴파일
 2. `npm run build:electron` — Electron 코드 컴파일
 3. `npm run electron:node` — 번들용 Node.js 다운로드
-4. `npm run electron:prepare` — app-server package.json 생성
+4. `npm run electron:prepare` — app-server package.json 생성 + npm install (node_modules 프리번들)
 5. `npx electron-builder --publish never` — 인스톨러 생성
 
 macOS에서는 `CSC_IDENTITY_AUTO_DISCOVERY=false`로 코드 서명을 건너뛴다 (Apple Developer 인증서 미설정).

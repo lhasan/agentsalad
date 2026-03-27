@@ -113,7 +113,6 @@ const TRAY_ICONS: Record<ServerStatus, NativeImage> = {} as Record<
 function initTrayIcons(): void {
   TRAY_ICONS.stopped = createTrayIcon('gray');
   TRAY_ICONS.checking = createTrayIcon('gray');
-  TRAY_ICONS.installing = createTrayIcon('gray');
   TRAY_ICONS.starting = createTrayIcon('gray');
   TRAY_ICONS.running = createTrayIcon('green');
   TRAY_ICONS.error = createTrayIcon('red');
@@ -232,7 +231,7 @@ function createTray(): void {
 
 function updateTrayMenu(): void {
   const isRunning = serverManager.status === 'running';
-  const isBusy = ['checking', 'installing', 'starting'].includes(serverManager.status);
+  const isBusy = ['checking', 'starting'].includes(serverManager.status);
   const update = getAvailableUpdate();
 
   const template: Electron.MenuItemConstructorOptions[] = [];
@@ -287,7 +286,6 @@ function updateTrayForStatus(status: ServerStatus): void {
   const labels: Record<ServerStatus, string> = {
     stopped: 'Agent Salad — Stopped',
     checking: 'Agent Salad — Checking...',
-    installing: 'Agent Salad — Installing...',
     starting: 'Agent Salad — Starting...',
     running: 'Agent Salad — Running',
     error: 'Agent Salad — Error',

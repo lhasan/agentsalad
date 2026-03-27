@@ -34,8 +34,6 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 .status-badge.stopped .dot{background:var(--t3)}
 .status-badge.checking{background:var(--blue-s);color:var(--blue);border:1px solid var(--blue)}
 .status-badge.checking .dot{background:var(--blue);animation:pulse 1s infinite}
-.status-badge.installing{background:var(--blue-s);color:var(--blue);border:1px solid var(--blue)}
-.status-badge.installing .dot{background:var(--blue);animation:pulse 1s infinite}
 .status-badge.starting{background:var(--s1);color:var(--t2);border:1px solid var(--border)}
 .status-badge.starting .dot{background:var(--t2);animation:pulse 1s infinite}
 .status-badge.running{background:var(--green-s);color:var(--green);border:1px solid var(--green)}
@@ -97,14 +95,6 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
     <div class="spinner blue"></div>
   </div>
 
-  <!-- Installing dependencies -->
-  <div data-view="installing">
-    <div class="subtitle">Installing dependencies...<br><small style="color:var(--t3)">Only required on first launch.</small></div>
-    <div class="status-badge installing"><span class="dot"></span>Installing</div>
-    <div class="progress-bar"><div class="fill"></div></div>
-    <button class="btn btn-stop btn-sm" id="btn-stop-installing">Cancel</button>
-  </div>
-
   <!-- Starting server -->
   <div data-view="starting">
     <div class="subtitle">Starting server...</div>
@@ -142,11 +132,6 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 
   function showView(name) {
     views.forEach(v => v.classList.toggle('active', v.dataset.view === name));
-    if (name === 'installing' && !logVisible) {
-      logVisible = true;
-      logBox?.classList.add('visible');
-      if (logToggle) logToggle.textContent = '▾ Server Logs';
-    }
   }
 
   function appendLog(line) {
@@ -204,7 +189,6 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
   document.getElementById('btn-retry')?.addEventListener('click', () => api.startServer());
   document.getElementById('btn-report')?.addEventListener('click', () => reportIssue());
   document.getElementById('btn-stop-starting')?.addEventListener('click', () => api.stopServer());
-  document.getElementById('btn-stop-installing')?.addEventListener('click', () => api.stopServer());
 
   api.onStatusChanged((status) => {
     if (status === 'running') return;

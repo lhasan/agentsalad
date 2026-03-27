@@ -2,9 +2,9 @@
  * ServerManager — agentsalad 서버 프로세스 생명주기 관리
  *
  * Node.js 번들링: 패키징 시 build/node/에 Node.js 풀 배포판(node + npm)을 포함.
- * 시스템에 Node.js가 없어도 번들 바이너리로 npm install + 서버 실행 가능.
+ * node_modules 프리번들: 빌드 시 번들 Node.js로 npm install을 실행하여
+ * app-server/node_modules/를 패키지에 포함. 런타임 npm install 불필요.
  * 번들 Node.js 우선 → 시스템 Node.js 폴백 → 둘 다 없으면 에러.
- * npm은 번들 npm-cli.js를 node로 직접 실행 (npm.cmd 의존 없음).
  *
  * PATH 복원: macOS GUI 앱은 터미널 PATH를 상속받지 못함.
  * 로그인 셸($SHELL -lc)에서 실제 PATH를 가져와 모든 child_process에 주입.
@@ -14,15 +14,9 @@
  * 설정하여 앱 번들 외부에 DB/워크스페이스를 저장. 앱 업데이트 시에도 데이터 보존.
  * 레거시 데이터(앱 번들 내 store/)가 있으면 자동 마이그레이션.
  *
- * ABI 호환성: node_modules 설치 시 .node-abi 마커 파일에 NODE_MODULE_VERSION 기록.
- * 다음 시작 시 현재 Node.js의 ABI와 비교하여 불일치하면 node_modules 삭제 후 재설치.
- * 이전 버전에서 시스템 Node.js로 설치된 모듈을 번들 Node.js로 실행할 때 발생하는
- * "was compiled against a different Node.js version" 크래시 방지.
- *
  * 상태 흐름:
  *   stopped → (start)
- *     → checking   : PATH 복원 + Node.js 감지 + ABI 체크 + 데이터 마이그레이션
- *     → installing : npm install --production (node_modules 없거나 ABI 불일치)
+ *     → checking   : PATH 복원 + Node.js 감지 + 데이터 마이그레이션
  *     → starting   : 서버 프로세스 spawn + health check
  *     → running    : 서버 정상 가동
  *     → error      : 어느 단계든 실패
@@ -37,7 +31,6 @@ import { app } from 'electron';
 export type ServerStatus =
   | 'stopped'
   | 'checking'
-  | 'installing'
   | 'starting'
   | 'running'
   | 'error';
@@ -45,10 +38,8 @@ export type ServerStatus =
 const HEALTH_CHECK_URL = 'http://127.0.0.1:3210';
 const HEALTH_POLL_MS = 500;
 const HEALTH_TIMEOUT_MS = 60_000;
-const INSTALL_TIMEOUT_MS = 300_000;
 const GRACEFUL_KILL_MS = 3_000;
 const LOG_BUFFER_MAX = 300;
-const ABI_MARKER_FILE = '.node-abi';
 
 export class ServerManager extends EventEmitter {
   private process: ChildProcess | null = null;
@@ -63,8 +54,6 @@ export class ServerManager extends EventEmitter {
   private shellEnv: Record<string, string> | null = null;
   /** detectNode에서 확정된 node 바이너리 경로 */
   private resolvedNodePath: string | null = null;
-  /** detectNode에서 확정된 npm-cli.js 경로 (null이면 시스템 npm 사용) */
-  private resolvedNpmCliPath: string | null = null;
 
   get status(): ServerStatus {
     return this._status;
@@ -151,7 +140,7 @@ export class ServerManager extends EventEmitter {
       const loginShell = process.env.SHELL || '/bin/zsh';
       this.appendLog(`[setup] Resolving PATH from ${loginShell}...`);
 
-      const child = execFile(loginShell, ['-lc', 'env'], {
+      execFile(loginShell, ['-lc', 'env'], {
         timeout: 5_000,
         encoding: 'utf-8',
       }, (err, stdout) => {
@@ -224,7 +213,6 @@ export class ServerManager extends EventEmitter {
   async start(): Promise<void> {
     if (
       this._status === 'checking' ||
-      this._status === 'installing' ||
       this._status === 'starting' ||
       this._status === 'running'
     )
@@ -237,26 +225,12 @@ export class ServerManager extends EventEmitter {
     try {
       this.setStatus('checking');
 
-      // 0) 셸 PATH 복원
       const env = await this.resolveShellEnv();
-
-      // 1) Node.js 감지
       await this.detectNode(env);
-
-      // 1.5) 레거시 데이터 마이그레이션 (앱 번들 내 → userData)
       this.migrateStoreIfNeeded();
 
-      // 2) node_modules 없거나 ABI 불일치 시 설치
-      const appRoot = this.getAppRoot();
-      const needsInstall = await this.checkNeedsInstall(appRoot, env);
-      if (needsInstall) {
-        this.setStatus('installing');
-        await this.runNpmInstall(appRoot, env);
-      }
-
-      // 3) 서버 시작
       this.setStatus('starting');
-      this.spawnServer(appRoot, env);
+      this.spawnServer(this.getAppRoot(), env);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.appendLog(`[electron] Setup failed: ${msg}`);
@@ -284,49 +258,26 @@ export class ServerManager extends EventEmitter {
     return fs.existsSync(nodePath) ? nodePath : null;
   }
 
-  /**
-   * 번들된 npm-cli.js 경로.
-   * macOS/Linux: <nodeDir>/lib/node_modules/npm/bin/npm-cli.js
-   * Windows: <nodeDir>/node_modules/npm/bin/npm-cli.js
-   */
-  private getBundledNpmCliPath(): string | null {
-    const isWin = process.platform === 'win32';
-    const base = app.isPackaged
-      ? path.join(process.resourcesPath, 'node')
-      : path.join(app.getAppPath(), 'build', 'node');
-
-    const npmCli = isWin
-      ? path.join(base, 'node_modules', 'npm', 'bin', 'npm-cli.js')
-      : path.join(base, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
-
-    return fs.existsSync(npmCli) ? npmCli : null;
-  }
-
   // ── Node.js 감지 ──────────────────────────────────────────
 
   /**
    * 번들 Node.js 우선 → 시스템 Node.js 폴백.
-   * 감지 성공 시 resolvedNodePath / resolvedNpmCliPath에 경로 저장.
+   * 감지 성공 시 resolvedNodePath에 경로 저장.
    */
   private async detectNode(env: Record<string, string>): Promise<void> {
     this.appendLog('[setup] Checking Node.js...');
 
-    // 1) 번들 Node.js 확인
     const bundledNode = this.getBundledNodePath();
-    const bundledNpmCli = this.getBundledNpmCliPath();
-
     if (bundledNode) {
       const version = await this.getNodeVersion(bundledNode, env);
       if (version) {
         this.appendLog(`[setup] Bundled Node.js ${version} detected`);
         this.resolvedNodePath = bundledNode;
-        this.resolvedNpmCliPath = bundledNpmCli;
         return;
       }
       this.appendLog('[setup] Bundled Node.js exists but failed to execute, trying system...');
     }
 
-    // 2) 시스템 Node.js 폴백
     const systemVersion = await this.getNodeVersion('node', env);
     if (systemVersion) {
       const major = parseInt(systemVersion.replace('v', ''), 10);
@@ -335,7 +286,6 @@ export class ServerManager extends EventEmitter {
       }
       this.appendLog(`[setup] System Node.js ${systemVersion} detected (fallback)`);
       this.resolvedNodePath = 'node';
-      this.resolvedNpmCliPath = null;
       return;
     }
 
@@ -352,191 +302,6 @@ export class ServerManager extends EventEmitter {
       check.on('error', () => resolve(null));
       check.on('exit', (code) => resolve(code === 0 && version ? version : null));
     });
-  }
-
-  /** process.versions.modules (NODE_MODULE_VERSION) 조회 */
-  private getNodeABI(nodePath: string, env: Record<string, string>): Promise<string | null> {
-    return new Promise((resolve) => {
-      const child = spawn(nodePath, ['-e', 'console.log(process.versions.modules)'], {
-        stdio: 'pipe',
-        env,
-      });
-      let abi = '';
-      child.stdout?.on('data', (d: Buffer) => { abi += d.toString().trim(); });
-      child.on('error', () => resolve(null));
-      child.on('exit', (code) => resolve(code === 0 && abi ? abi : null));
-    });
-  }
-
-  // ── ABI 호환성 체크 ──────────────────────────────────────
-
-  /**
-   * node_modules 설치 필요 여부 판단.
-   * 1) node_modules 없음 → 설치 필요
-   * 2) node_modules 있으나 .node-abi 마커 없음 → 이전 버전 잔재, 재설치
-   * 3) .node-abi와 현재 Node ABI 불일치 → native module ABI 불일치, 재설치
-   */
-  private async checkNeedsInstall(appRoot: string, env: Record<string, string>): Promise<boolean> {
-    const modulesDir = path.join(appRoot, 'node_modules');
-    const abiFile = path.join(appRoot, ABI_MARKER_FILE);
-
-    if (!fs.existsSync(modulesDir)) {
-      return true;
-    }
-
-    const nodePath = this.resolvedNodePath || 'node';
-    const currentABI = await this.getNodeABI(nodePath, env);
-    if (!currentABI) {
-      this.appendLog('[setup] Could not determine Node.js ABI, reinstalling to be safe');
-      this.purgeNodeModules(modulesDir, abiFile);
-      return true;
-    }
-
-    let savedABI: string | null = null;
-    try {
-      savedABI = fs.readFileSync(abiFile, 'utf-8').trim();
-    } catch {
-      // 마커 파일 없음 = 이전 버전에서 설치된 node_modules
-    }
-
-    if (savedABI !== currentABI) {
-      this.appendLog(
-        savedABI
-          ? `[setup] Node ABI changed (${savedABI} → ${currentABI}), reinstalling native modules...`
-          : `[setup] No ABI marker found, reinstalling to ensure compatibility...`,
-      );
-      this.purgeNodeModules(modulesDir, abiFile);
-      return true;
-    }
-
-    this.appendLog(`[setup] node_modules ABI matches (${currentABI}), skipping install`);
-    return false;
-  }
-
-  private purgeNodeModules(modulesDir: string, abiFile: string): void {
-    try {
-      fs.rmSync(modulesDir, { recursive: true, force: true });
-      this.appendLog('[setup] Removed stale node_modules');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.appendLog(`[setup] Failed to remove node_modules: ${msg}`);
-    }
-    try {
-      fs.unlinkSync(abiFile);
-    } catch {
-      // 없으면 무시
-    }
-  }
-
-  // ── npm install ───────────────────────────────────────────
-
-  /**
-   * npm install 실행.
-   * 번들 npm-cli.js가 있으면 resolvedNodePath로 직접 실행 (시스템 npm 불필요).
-   * 없으면 시스템 npm 폴백.
-   */
-  private runNpmInstall(
-    appRoot: string,
-    env: Record<string, string>,
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.appendLog('[setup] Installing dependencies (npm install)...');
-      this.appendLog('[setup] This may take a minute on first launch.');
-
-      const nodePath = this.resolvedNodePath || 'node';
-      const npmCliPath = this.resolvedNpmCliPath;
-      const isWin = process.platform === 'win32';
-
-      let cmd: string;
-      let args: string[];
-      let useShell = false;
-
-      let installEnv = env;
-
-      if (npmCliPath) {
-        cmd = nodePath;
-        args = [npmCliPath, 'install', '--production', '--no-optional'];
-        this.appendLog(`[setup] Using bundled npm: ${nodePath} ${npmCliPath}`);
-
-        // node-gyp가 native 모듈 컴파일 시 PATH에서 `node`를 찾아 타겟 ABI를 결정.
-        // 번들 Node의 bin/을 PATH 앞에 삽입하여 시스템 Node 대신 번들 Node를 사용하게 함.
-        const bundledBinDir = path.dirname(nodePath);
-        installEnv = {
-          ...env,
-          PATH: `${bundledBinDir}${path.delimiter}${env.PATH || ''}`,
-        };
-      } else {
-        cmd = isWin ? 'npm.cmd' : 'npm';
-        args = ['install', '--production', '--no-optional'];
-        useShell = isWin;
-        this.appendLog('[setup] Using system npm');
-      }
-
-      const child = spawn(cmd, args, {
-        cwd: appRoot,
-        env: installEnv,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: useShell,
-      });
-
-      // spawn의 timeout 옵션은 Windows에서 문제를 일으킬 수 있으므로 수동 구현
-      let settled = false;
-      const timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          child.kill();
-          reject(new Error(`npm install timed out after ${INSTALL_TIMEOUT_MS / 1000}s`));
-        }
-      }, INSTALL_TIMEOUT_MS);
-
-      child.stdout?.on('data', (chunk: Buffer) => {
-        const line = chunk.toString().trimEnd();
-        if (line) this.appendLog(`[npm] ${line}`);
-      });
-
-      child.stderr?.on('data', (chunk: Buffer) => {
-        const line = chunk.toString().trimEnd();
-        if (line && !line.startsWith('npm warn')) {
-          this.appendLog(`[npm] ${line}`);
-        }
-      });
-
-      child.on('error', (err) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          reject(new Error(`npm install failed: ${err.message}`));
-        }
-      });
-
-      child.on('exit', (code) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          if (code === 0) {
-            this.appendLog('[setup] Dependencies installed successfully.');
-            this.writeABIMarker(appRoot, env);
-            resolve();
-          } else {
-            reject(new Error(`npm install exited with code ${code}`));
-          }
-        }
-      });
-    });
-  }
-
-  /** 설치 완료 후 현재 Node ABI를 마커 파일에 기록 */
-  private async writeABIMarker(appRoot: string, env: Record<string, string>): Promise<void> {
-    const nodePath = this.resolvedNodePath || 'node';
-    const abi = await this.getNodeABI(nodePath, env);
-    if (abi) {
-      try {
-        fs.writeFileSync(path.join(appRoot, ABI_MARKER_FILE), abi, 'utf-8');
-        this.appendLog(`[setup] ABI marker written: ${abi}`);
-      } catch {
-        // non-critical
-      }
-    }
   }
 
   // ── 서버 프로세스 spawn ───────────────────────────────────

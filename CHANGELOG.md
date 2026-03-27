@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.4 (2026-03-27)
+
+### Bug Fixes
+- 런타임 npm install 제거 — Windows npm.cmd 미발견, Program Files 쓰기 권한 거부(EPERM), macOS npm 캐시 권한 오류(EACCES) 등 4가지 첫 실행 실패 근본 해결
+
+### Features
+- 빌드 시점 node_modules 프리번들 — 번들 Node.js로 의존성을 미리 설치하여 패키지에 포함
+- "Installing dependencies..." 단계 제거, 첫 실행도 수초 내 서버 시작
+
+### Chores
+- ServerManager에서 npm install/ABI 체크/npm 경로 탐색 코드 ~200줄 제거
+- electron:prepare 스크립트에 빌드 시 npm install 통합
+- Electron 상태 페이지에서 Installing 뷰 제거
+
 ## v0.1.3 (2026-03-27)
 
 ### Bug Fixes
