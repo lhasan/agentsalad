@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.5 (2026-03-27)
+
+### Bug Fixes
+- LLM 프로바이더 에러 메시지를 분류하지 않고 API 원본 그대로 사용자에게 전달 — 이전에 "Model not found" 같은 엉뚱한 메시지로 표시되던 문제 해결
+- 동일 봇 토큰으로 채널 중복 등록 시 Telegram 409 Conflict로 모든 봇이 먹통되던 버그 수정
+- Anthropic/OpenAI/Google 전용 SDK 프로바이더의 잘못된 base_url 시드 값으로 API 호출 실패하던 버그 수정
+
+### Features
+- Groq 전용 SDK(@ai-sdk/groq) 전환 — structured outputs, 이미지 입력, browser search 등 전용 기능 지원
+- OpenRouter 전용 SDK(@openrouter/ai-sdk-provider) 전환 — 최적화된 에러 처리 및 API 호환성
+- 봇 토큰 중복 등록 방지 — 이미 등록된 토큰으로 채널 생성 시 기존 채널로 안내하는 팝업 (한/영/일/중)
+
+### Chores
+- 전용 SDK 프로바이더(Anthropic, OpenAI, Google, Groq, OpenRouter)의 base_url을 빈값으로 통일, SDK 내부 관리로 위임
+- 기존 DB의 stale base_url 자동 마이그레이션 로직 확장
+
 ## v0.1.4 (2026-03-27)
 
 ### Bug Fixes

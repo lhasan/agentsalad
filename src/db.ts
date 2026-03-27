@@ -371,35 +371,35 @@ function ensureDefaultProviders(): void {
       id: 'anthropic',
       provider_key: 'anthropic',
       name: 'Anthropic',
-      base_url: 'https://api.anthropic.com',
+      base_url: '',
       auth_scheme: 'x-api-key' as const,
     },
     {
       id: 'openrouter',
       provider_key: 'openrouter',
       name: 'OpenRouter',
-      base_url: 'https://openrouter.ai/api/v1',
+      base_url: '',
       auth_scheme: 'bearer' as const,
     },
     {
       id: 'openai',
       provider_key: 'openai',
       name: 'OpenAI',
-      base_url: 'https://api.openai.com/v1',
+      base_url: '',
       auth_scheme: 'bearer' as const,
     },
     {
       id: 'groq',
       provider_key: 'groq',
       name: 'Groq',
-      base_url: 'https://api.groq.com/openai/v1',
+      base_url: '',
       auth_scheme: 'bearer' as const,
     },
     {
       id: 'google',
       provider_key: 'google',
       name: 'Google (Gemini)',
-      base_url: 'https://generativelanguage.googleapis.com/v1beta',
+      base_url: '',
       auth_scheme: 'bearer' as const,
     },
     {
@@ -414,6 +414,22 @@ function ensureDefaultProviders(): void {
     db.prepare(
       `INSERT OR IGNORE INTO llm_providers (id, provider_key, name, base_url, auth_scheme, api_key, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, '', 1, ?, ?)`,
     ).run(p.id, p.provider_key, p.name, p.base_url, p.auth_scheme, now, now);
+  }
+
+  // 전용 SDK 프로바이더의 잘못된 base_url 마이그레이션.
+  // 이전 버전에서 시드된 base_url이 SDK 기본값을 덮어써서 404를 유발.
+  // 사용자가 커스텀으로 변경한 경우는 건드리지 않음.
+  const staleBaseUrls: Record<string, string> = {
+    anthropic: 'https://api.anthropic.com',
+    openai: 'https://api.openai.com/v1',
+    google: 'https://generativelanguage.googleapis.com/v1beta',
+    groq: 'https://api.groq.com/openai/v1',
+    openrouter: 'https://openrouter.ai/api/v1',
+  };
+  for (const [id, staleUrl] of Object.entries(staleBaseUrls)) {
+    db.prepare(
+      `UPDATE llm_providers SET base_url = '', updated_at = ? WHERE id = ? AND base_url = ?`,
+    ).run(now, id, staleUrl);
   }
 }
 
@@ -749,6 +765,17 @@ export function getManagedChannelById(id: string): ManagedChannel | undefined {
   return db
     .prepare(`SELECT ${MC_COLUMNS} FROM managed_channels WHERE id = ?`)
     .get(id) as ManagedChannel | undefined;
+}
+
+/** 동일 봇 토큰으로 이미 등록된 채널 조회 (중복 방지용) */
+export function findChannelByBotToken(
+  botToken: string,
+): ManagedChannel | undefined {
+  return db
+    .prepare(
+      `SELECT ${MC_COLUMNS} FROM managed_channels WHERE json_extract(config_json, '$.botToken') = ?`,
+    )
+    .get(botToken) as ManagedChannel | undefined;
 }
 
 export function createManagedChannel(input: {

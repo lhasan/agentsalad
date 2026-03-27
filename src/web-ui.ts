@@ -70,7 +70,13 @@ export interface WebUiContext {
   pairTelegramBot: (
     channelId: string,
     botToken: string,
-  ) => Promise<{ success: boolean; error?: string; botUsername?: string }>;
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    botUsername?: string;
+    duplicate?: boolean;
+    existingChannel?: { id: string; name: string };
+  }>;
   pairDiscordBot: (
     channelId: string,
     botToken: string,
@@ -79,12 +85,20 @@ export interface WebUiContext {
     error?: string;
     botUsername?: string;
     botId?: string;
+    duplicate?: boolean;
+    existingChannel?: { id: string; name: string };
   }>;
   pairSlackBot: (
     channelId: string,
     botToken: string,
     appToken: string,
-  ) => Promise<{ success: boolean; error?: string; botUsername?: string }>;
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    botUsername?: string;
+    duplicate?: boolean;
+    existingChannel?: { id: string; name: string };
+  }>;
   updateChannelPairing: (id: string, status: string, config?: string) => void;
   connectChannel: (channelId: string) => Promise<void>;
   listTargets: () => TargetProfile[];
@@ -867,7 +881,7 @@ en:{
   nameRequired:'Name is required',toolNameRequired:'Please enter Tool Name',
   toolNameFormat:'Tool Name must be lowercase letters and underscores only',
   nameAndPromptRequired:'Name and Prompt required',dateTimeRequired:'Date & Time required',
-  pairingFailed:'Pairing failed: ',failedCreateChannel:'Failed to create channel',typeMismatch:'Channel and target platform must match',
+  pairingFailed:'Pairing failed: ',failedCreateChannel:'Failed to create channel',typeMismatch:'Channel and target platform must match',duplicateTokenMsg:'A channel with this bot token already exists: "{name}". Would you like to view the existing channel?',
   unknownProvider:'Unknown provider',apiKeyNotSet:'API key not set',notPaired:'Not paired',
   newCustomSkill:'New Custom Skill',editCustomSkill:'Edit Custom Skill',
   deleteCustomSkill:'Delete this custom skill?',
@@ -1060,7 +1074,7 @@ ko:{
   nameRequired:'이름을 입력하세요',toolNameRequired:'도구 이름을 입력하세요',
   toolNameFormat:'도구 이름은 영문 소문자와 언더스코어만 가능합니다',
   nameAndPromptRequired:'이름과 프롬프트를 입력하세요',dateTimeRequired:'날짜와 시간을 입력하세요',
-  pairingFailed:'페어링 실패: ',failedCreateChannel:'채널 생성 실패',typeMismatch:'채널과 대상의 플랫폼이 일치해야 합니다',
+  pairingFailed:'페어링 실패: ',failedCreateChannel:'채널 생성 실패',typeMismatch:'채널과 대상의 플랫폼이 일치해야 합니다',duplicateTokenMsg:'이미 같은 봇으로 등록된 채널 "{name}"이(가) 있습니다. 해당 채널을 확인하시겠습니까?',
   unknownProvider:'알 수 없는 프로바이더',apiKeyNotSet:'API 키 미설정',notPaired:'페어링 안됨',
   newCustomSkill:'새 커스텀 스킬',editCustomSkill:'커스텀 스킬 편집',
   deleteCustomSkill:'이 커스텀 스킬을 삭제하시겠습니까?',
@@ -1245,7 +1259,7 @@ ja:{
   nameRequired:'名前を入力してください',toolNameRequired:'ツール名を入力してください',
   toolNameFormat:'ツール名は英小文字とアンダースコアのみ',
   nameAndPromptRequired:'名前とプロンプトを入力してください',dateTimeRequired:'日時を入力してください',
-  pairingFailed:'ペアリング失敗: ',failedCreateChannel:'チャンネル作成失敗',typeMismatch:'チャンネルとターゲットのプラットフォームが一致する必要があります',
+  pairingFailed:'ペアリング失敗: ',failedCreateChannel:'チャンネル作成失敗',typeMismatch:'チャンネルとターゲットのプラットフォームが一致する必要があります',duplicateTokenMsg:'同じボットトークンで登録済みのチャンネル「{name}」があります。既存のチャンネルを確認しますか？',
   unknownProvider:'不明なプロバイダー',apiKeyNotSet:'APIキー未設定',notPaired:'未ペアリング',
   newCustomSkill:'新規カスタムスキル',editCustomSkill:'カスタムスキル編集',
   deleteCustomSkill:'このカスタムスキルを削除しますか？',
@@ -1429,7 +1443,7 @@ zh:{
   nameRequired:'请输入名称',toolNameRequired:'请输入工具名称',
   toolNameFormat:'工具名称只能使用英文小写和下划线',
   nameAndPromptRequired:'请输入名称和提示词',dateTimeRequired:'请输入日期和时间',
-  pairingFailed:'配对失败: ',failedCreateChannel:'创建频道失败',typeMismatch:'频道和目标的平台必须一致',
+  pairingFailed:'配对失败: ',failedCreateChannel:'创建频道失败',typeMismatch:'频道和目标的平台必须一致',duplicateTokenMsg:'已有使用相同机器人令牌的频道「{name}」。是否查看现有频道？',
   unknownProvider:'未知提供商',apiKeyNotSet:'API密钥未设置',notPaired:'未配对',
   newCustomSkill:'新建自定义技能',editCustomSkill:'编辑自定义技能',
   deleteCustomSkill:'删除此自定义技能？',
@@ -2100,6 +2114,17 @@ async function submitAddChannel(){
   var pairBody={channelType:type,botToken:botToken};
   if(type==='slack')pairBody.appToken=config.appToken;
   var pr=await api('/api/channels/'+r.id+'/pair','POST',pairBody);
+  if(pr.duplicate&&pr.existingChannel){
+    await api('/api/channels/'+r.id,'DELETE');
+    var goToExisting=confirm(t('duplicateTokenMsg').replace('{name}',pr.existingChannel.name));
+    if(goToExisting){
+      load();
+      setTimeout(function(){openChannelDetail(pr.existingChannel.id)},300);
+    }else{
+      load();
+    }
+    return;
+  }
   if(!pr.success){showAlert(t('pairingFailed')+(pr.error||'Unknown'),'❌');return}
   if(type==='discord'&&pr.botId){showDiscordInvite(pr.botId);load();return}
   closeDetail();load();
@@ -3605,6 +3630,8 @@ export function startWebUiServer(
           error?: string;
           botUsername?: string;
           botId?: string;
+          duplicate?: boolean;
+          existingChannel?: { id: string; name: string };
         };
         if (channelType === 'discord') {
           result = await context.pairDiscordBot(channelId, botToken);
@@ -3615,7 +3642,11 @@ export function startWebUiServer(
         } else {
           result = await context.pairTelegramBot(channelId, botToken);
         }
-        sendJson(res, result.success ? 200 : 400, result);
+        sendJson(
+          res,
+          result.success ? 200 : result.duplicate ? 409 : 400,
+          result,
+        );
         return;
       }
       if (

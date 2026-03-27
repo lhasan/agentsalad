@@ -93,7 +93,6 @@ function classifyApiError(err: unknown): ProviderError {
   const bodyLower = body.toLowerCase();
 
   let type: ProviderErrorType = 'unknown';
-  let userMsg: string;
 
   if (
     status === 429 ||
@@ -101,13 +100,6 @@ function classifyApiError(err: unknown): ProviderError {
     bodyLower.includes('ratelimit')
   ) {
     type = 'rate_limit';
-    const retryAfter = (source?.responseHeaders as Record<string, string>)?.[
-      'retry-after'
-    ];
-    const waitMin = retryAfter ? Math.ceil(Number(retryAfter) / 60) : undefined;
-    userMsg = waitMin
-      ? `⚠️ API rate limit exceeded — retry available in ~${waitMin} min.`
-      : '⚠️ API rate limit exceeded. Please try again shortly.';
   } else if (
     status === 401 ||
     status === 403 ||
@@ -115,35 +107,50 @@ function classifyApiError(err: unknown): ProviderError {
     bodyLower.includes('invalid api key')
   ) {
     type = 'auth';
-    userMsg = '⚠️ API authentication failed — please check your API key.';
   } else if (
     status === 404 ||
     bodyLower.includes('not found') ||
     bodyLower.includes('not supported')
   ) {
     type = 'model_not_found';
-    userMsg = '⚠️ Model not found — please check the model name.';
   } else if (
     status === 503 ||
     status === 529 ||
     bodyLower.includes('overloaded')
   ) {
     type = 'overloaded';
-    userMsg = '⚠️ AI server is overloaded. Please try again shortly.';
   } else if (
     bodyLower.includes('context length') ||
     bodyLower.includes('token') ||
     bodyLower.includes('too long')
   ) {
     type = 'context_length';
-    userMsg =
-      '⚠️ Conversation too long to process. Please start a new conversation.';
-  } else {
-    userMsg =
-      '⚠️ An error occurred while generating a response. Please try again shortly.';
   }
 
+  const rawMessage = extractErrorMessage(body);
+  const userMsg = rawMessage
+    ? `⚠️ ${rawMessage}`
+    : '⚠️ An error occurred while generating a response. Please try again shortly.';
+
   return new ProviderError(type, status, userMsg, err);
+}
+
+/**
+ * API 응답 body에서 사람이 읽을 수 있는 에러 메시지 추출.
+ * JSON 구조(OpenRouter, Anthropic 등)를 먼저 시도하고, 실패 시 원본 텍스트.
+ */
+function extractErrorMessage(body: string): string | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body);
+    const msg =
+      parsed?.error?.message ?? parsed?.message ?? parsed?.error?.type;
+    if (typeof msg === 'string' && msg.length > 0) return msg;
+  } catch {
+    // JSON이 아닌 경우 원본 사용
+  }
+  const trimmed = body.length > 200 ? body.slice(0, 200) + '…' : body;
+  return trimmed || null;
 }
 
 /**

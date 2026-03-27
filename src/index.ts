@@ -49,6 +49,7 @@ import {
   updateServiceStatus,
   updateTarget,
   upsertLlmProvider,
+  findChannelByBotToken,
 } from './db.js';
 import { listBuiltinSkillMeta } from './skills/registry.js';
 import {
@@ -454,6 +455,15 @@ async function main(): Promise<void> {
 
       pairTelegramBot: async (channelId, botToken) => {
         try {
+          const existing = findChannelByBotToken(botToken);
+          if (existing && existing.id !== channelId) {
+            return {
+              success: false,
+              duplicate: true,
+              existingChannel: { id: existing.id, name: existing.name },
+            };
+          }
+
           const info = await verifyTelegramBot(botToken);
           if (!info) return { success: false, error: 'Invalid bot token' };
 
@@ -479,6 +489,15 @@ async function main(): Promise<void> {
 
       pairDiscordBot: async (channelId: string, botToken: string) => {
         try {
+          const existing = findChannelByBotToken(botToken);
+          if (existing && existing.id !== channelId) {
+            return {
+              success: false,
+              duplicate: true,
+              existingChannel: { id: existing.id, name: existing.name },
+            };
+          }
+
           const info = await verifyDiscordBot(botToken);
           if (!info)
             return { success: false, error: 'Invalid Discord bot token' };
@@ -509,6 +528,15 @@ async function main(): Promise<void> {
         appToken: string,
       ) => {
         try {
+          const existing = findChannelByBotToken(botToken);
+          if (existing && existing.id !== channelId) {
+            return {
+              success: false,
+              duplicate: true,
+              existingChannel: { id: existing.id, name: existing.name },
+            };
+          }
+
           const info = await verifySlackBot(botToken, appToken);
           if (!info) return { success: false, error: 'Invalid Slack tokens' };
 

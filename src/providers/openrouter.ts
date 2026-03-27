@@ -1,25 +1,21 @@
 /**
- * OpenRouter Provider - 여러 모델 통합 게이트웨이
+ * OpenRouter Provider - 전용 SDK(@openrouter/ai-sdk-provider)로 여러 모델 통합 게이트웨이
  *
- * OpenRouter는 Chat Completions API (/chat/completions)만 지원.
- * @ai-sdk/openai v3가 Responses API를 기본 사용하므로
- * @ai-sdk/openai-compatible 로 Chat Completions 포맷 강제.
+ * 전용 SDK가 base URL, 에러 처리 등을 내부 관리.
+ * base_url이 비어있으면 SDK 기본값 사용, 값이 있으면 커스텀 엔드포인트로 override.
  */
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel } from 'ai';
-
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export function createOpenRouterModel(params: {
   model: string;
   apiKey: string;
   baseUrl?: string;
 }): LanguageModel {
-  const provider = createOpenAICompatible({
-    name: 'openrouter',
+  const provider = createOpenRouter({
     apiKey: params.apiKey,
-    baseURL: params.baseUrl || OPENROUTER_BASE_URL,
+    ...(params.baseUrl ? { baseURL: params.baseUrl } : {}),
   });
 
-  return provider.chatModel(params.model);
+  return provider.chat(params.model);
 }
