@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /**
- * Node.js 바이너리 다운로드 — Electron 패키징용
+ * Node.js 풀 배포판 다운로드 — Electron 패키징용
  *
- * 현재 플랫폼에 맞는 Node.js 바이너리를 다운로드하여
+ * node 바이너리 + npm을 포함한 전체 런타임을 다운로드하여
  * build/node/ 디렉토리에 저장한다.
  * electron-builder가 extraResources로 패키징.
+ *
+ * 시스템에 Node.js 미설치 환경에서도 동작하도록
+ * 번들 Node.js로 npm install + 서버 실행을 모두 수행.
  *
  * 사용: node scripts/download-node.cjs [version]
  * 예:   node scripts/download-node.cjs 22.15.0
@@ -18,9 +21,9 @@ const NODE_VERSION = process.argv[2] || '22.15.0';
 const BASE_URL = `https://nodejs.org/dist/v${NODE_VERSION}`;
 
 const PLATFORM_MAP = {
-  darwin: { os: 'darwin', ext: 'tar.gz', bin: 'node' },
+  darwin: { os: 'darwin', ext: 'tar.gz', bin: 'bin/node' },
   win32: { os: 'win', ext: 'zip', bin: 'node.exe' },
-  linux: { os: 'linux', ext: 'tar.gz', bin: 'node' },
+  linux: { os: 'linux', ext: 'tar.gz', bin: 'bin/node' },
 };
 
 const ARCH_MAP = {
@@ -55,24 +58,52 @@ function main() {
 
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`Downloading Node.js v${NODE_VERSION} (${plat.os}-${arch})...`);
+  console.log(`Downloading Node.js v${NODE_VERSION} full distribution (${plat.os}-${arch})...`);
   console.log(`URL: ${url}`);
 
   download(url, archivePath, () => {
-    console.log('Extracting binary...');
+    console.log('Extracting full distribution...');
 
     if (plat.ext === 'tar.gz') {
-      const prefix = `node-v${NODE_VERSION}-${plat.os}-${arch}/bin/node`;
       execSync(
-        `tar -xzf "${archivePath}" -C "${outDir}" --strip-components=2 "${prefix}"`,
+        `tar -xzf "${archivePath}" -C "${outDir}" --strip-components=1`,
         { stdio: 'inherit' },
       );
     } else {
-      // Windows zip — extract node.exe
+      const prefix = `node-v${NODE_VERSION}-${plat.os}-${arch}`;
       execSync(
-        `unzip -jo "${archivePath}" "node-v${NODE_VERSION}-${plat.os}-${arch}/node.exe" -d "${outDir}"`,
+        `powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${outDir}' -Force"`,
         { stdio: 'inherit' },
       );
+      // Windows zip extracts with top-level dir — move contents up
+      const extractedDir = path.join(outDir, prefix);
+      if (fs.existsSync(extractedDir)) {
+        for (const entry of fs.readdirSync(extractedDir)) {
+          const src = path.join(extractedDir, entry);
+          const dest = path.join(outDir, entry);
+          if (!fs.existsSync(dest)) {
+            fs.renameSync(src, dest);
+          }
+        }
+        fs.rmSync(extractedDir, { recursive: true, force: true });
+      }
+    }
+
+    // 불필요 디렉토리 삭제 (사이즈 절감)
+    for (const dir of ['include', 'share', 'man']) {
+      const p = path.join(outDir, dir);
+      if (fs.existsSync(p)) {
+        fs.rmSync(p, { recursive: true, force: true });
+      }
+    }
+    // corepack 제거
+    const corepackMod = path.join(outDir, 'lib', 'node_modules', 'corepack');
+    if (fs.existsSync(corepackMod)) {
+      fs.rmSync(corepackMod, { recursive: true, force: true });
+    }
+    const corepackModWin = path.join(outDir, 'node_modules', 'corepack');
+    if (fs.existsSync(corepackModWin)) {
+      fs.rmSync(corepackModWin, { recursive: true, force: true });
     }
 
     // 아카이브 삭제
@@ -80,17 +111,33 @@ function main() {
 
     // 실행 권한 설정
     if (process.platform !== 'win32') {
-      fs.chmodSync(binPath, 0o755);
+      fs.chmodSync(path.join(outDir, 'bin', 'node'), 0o755);
     }
 
-    console.log(`Node.js v${NODE_VERSION} binary ready: ${binPath}`);
+    const totalSize = getDirSizeMB(outDir);
+    console.log(`Node.js v${NODE_VERSION} full distribution ready: ${outDir} (~${totalSize}MB)`);
   });
+}
+
+function getDirSizeMB(dirPath) {
+  let total = 0;
+  for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+    const full = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      total += getDirSizeMB(full);
+    } else {
+      total += fs.statSync(full).size;
+    }
+  }
+  return (total / 1048576).toFixed(1);
 }
 
 function download(url, dest, cb) {
   const file = fs.createWriteStream(dest);
   https.get(url, (res) => {
     if (res.statusCode === 302 || res.statusCode === 301) {
+      file.close();
+      fs.unlinkSync(dest);
       download(res.headers.location, dest, cb);
       return;
     }

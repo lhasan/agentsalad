@@ -1,6 +1,6 @@
 {
   "name": "agentsalad",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Multi-provider AI agent platform served through messenger channels.",
   "license": "Elastic-2.0",
   "type": "module",
@@ -22,7 +22,7 @@
     "electron:dev": "npm run build:electron && node electron/launch.cjs",
     "electron:node": "node scripts/download-node.cjs",
     "electron:prepare": "node scripts/prepare-app-server.cjs",
-    "electron:build": "npm run build && npm run build:electron && npm run electron:prepare && electron-builder"
+    "electron:build": "npm run build && npm run build:electron && npm run electron:node && npm run electron:prepare && electron-builder"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
@@ -81,6 +81,10 @@
       {
         "from": "build/app-server-pkg/package-lock.json",
         "to": "app-server/package-lock.json"
+      },
+      {
+        "from": "build/node",
+        "to": "node"
       }
     ],
     "mac": {

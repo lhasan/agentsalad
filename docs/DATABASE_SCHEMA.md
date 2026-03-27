@@ -252,8 +252,9 @@ Service ↔ Cron junction table. One cron can be reused across multiple services
 
 ## Runtime Rules
 
-- Service matching (user target): lookup by `channel_id + target.target_id` where `target_type='user'`
-- Service matching (room target): lookup by `channel_id + target.target_id` where `target_type='room'`
+- Service matching (DM): `findActiveService(channelId, userId)` → `target_type='user'`
+- Service matching (room): `findActiveServiceByRoom(channelId, roomId)` → `target_type='room'`, fallback `findActiveService(channelId, userId)` → user 타겟으로 방 내 응답
+- Response routing: 메시지 원점(context.roomId) 기반. 방에서 온 메시지 → 방으로, DM → DM으로. user 타겟이 방에서 매칭돼도 방으로 응답
 - Public auto-create: only `everyone` template services can spawn new target+service bindings on first interaction
 - Conversation context: up to 200 recent messages per service
 - Service deletion cascades to conversations and archives

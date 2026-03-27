@@ -48,6 +48,9 @@ jobs:
       - name: Build Electron
         run: npm run build:electron
 
+      - name: Download bundled Node.js
+        run: npm run electron:node
+
       - name: Prepare app-server package
         run: npm run electron:prepare
 

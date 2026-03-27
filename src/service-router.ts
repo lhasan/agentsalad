@@ -6,19 +6,18 @@
  *
  * DM 메시지: findActiveService(channelId, userId) → user 타겟 매칭
  * 채널 메시지: findActiveServiceByRoom(channelId, roomId) → room 타겟 매칭
+ *   → room 미매칭 시 findActiveService(channelId, userId) → user 타겟으로 방 내 응답
  * everyone 템플릿: 에이전트+채널+모두에게 서비스가 있으면 미매칭 시
  * 실제 userId/roomId별 Target+Service를 자동 생성
- * auto_session 레거시는 폐기되었고, 퍼블릭 자동 생성은 everyone 템플릿만 사용한다.
+ *
+ * 응답 라우팅: 타겟 타입이 아니라 메시지 원점(context.roomId) 기반.
+ * 방에서 온 메시지 → 방으로 응답, DM → DM으로 응답. user 타겟이 방에서
+ * 매칭돼도 방으로 응답한다 (DM이 아닌 발신 채널로 회신).
  *
  * Cron 스케줄러도 processCronMessage()를 통해 동일한 파이프라인 사용.
  * 채널 팩토리: createChannelByType()으로 Telegram/Discord/Slack 분기.
  * 워크스페이스 3-depth: store/workspaces/<agent>/<channel>/<target>/
- * 최근 수정: 자동 생성 타겟은 target_id 기반 folder_name으로 워크스페이스를
- * 고정하고, 표시 닉네임은 프롬프트/화면 표시용으로만 사용한다.
- * 최근 수정: 동일 서비스에 대한 동시 메시지를 배치 큐잉하여 순차 처리.
- * 처리 중 도착한 메시지는 DB에 저장 + pendingBatches에 누적, 현재 턴 완료 후
- * 드레인 루프에서 일괄 LLM 호출. processServiceTurn으로 코어 파이프라인을 추출하여
- * 정상 경로와 배치 드레인 양쪽에서 공유한다.
+ * 동일 서비스에 대한 동시 메시지를 배치 큐잉하여 순차 처리.
  */
 import {
   addConversationMessage,
@@ -288,20 +287,18 @@ async function processServiceTurn(
 ): Promise<boolean> {
   const channel = activeChannels.get(channelId);
   const target = getTargetById(targetId);
-  const isRoomTarget = target?.target_type === 'room';
   const targetName = target?.nickname || senderName;
   const targetFolderName =
     target?.folder_name || target?.target_id || senderUserId;
   const roomId = context?.roomId;
+  const respondInRoom = !!roomId;
 
-  const stopTyping = isRoomTarget
-    ? startTypingLoop(channel, '', roomId)
-    : startTypingLoop(channel, senderUserId);
+  const stopTyping = startTypingLoop(channel, senderUserId, roomId);
 
   const sendResponse = async (responseText: string) => {
     if (!channel) return;
-    if (isRoomTarget && roomId && channel.sendToRoom) {
-      await channel.sendToRoom(roomId, responseText, context?.threadId);
+    if (respondInRoom && channel.sendToRoom) {
+      await channel.sendToRoom(roomId!, responseText, context?.threadId);
     } else {
       await channel.sendMessage(senderUserId, responseText);
     }
@@ -361,7 +358,8 @@ async function processServiceTurn(
         toolCount: Object.keys(tools).length,
         timeAware,
         smartStep: agent.smart_step === 1,
-        isRoomTarget,
+        targetType: target?.target_type,
+        respondInRoom,
       },
       'Processing service message',
     );
@@ -391,7 +389,7 @@ async function processServiceTurn(
 
     await sendResponse(response);
     logger.info(
-      { serviceId, responseLen: response.length, isRoomTarget },
+      { serviceId, responseLen: response.length, respondInRoom },
       'Service response sent',
     );
 
@@ -484,6 +482,9 @@ async function processMessage(
     }
   } else if (roomId) {
     serviceMatch = findActiveServiceByRoom(channelId, roomId);
+    if (!serviceMatch) {
+      serviceMatch = findActiveService(channelId, senderUserId);
+    }
     if (!serviceMatch) {
       serviceMatch = resolveTemplateService(
         channelId,

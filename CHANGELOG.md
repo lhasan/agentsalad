@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.3 (2026-03-27)
+
+### Bug Fixes
+- Electron 앱에서 Node.js 미설치 환경에서 "Node.js not found" 오류로 실행 불가하던 버그 수정
+
+### Features
+- Node.js 풀 배포판 번들링 (node + npm) — 시스템에 Node.js 없이도 앱 실행 가능
+- 번들 Node.js 우선 사용 → 시스템 Node.js 폴백 구조로 ABI 불일치 방지
+
+### Chores
+- download-node.cjs: 바이너리 전용 → 풀 배포판(node + npm) 다운로드로 변경
+- electron-build.yml: CI/CD 파이프라인에 Node.js 번들링 단계 추가
+
 ## v0.1.2 (2026-03-26)
 
 ### Features

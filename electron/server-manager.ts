@@ -1,8 +1,10 @@
 /**
  * ServerManager — agentsalad 서버 프로세스 생명주기 관리
  *
- * 경량 패키징: Electron 앱에는 dist/ + package.json만 번들.
- * 첫 실행 시 시스템 Node.js를 감지하고, npm install을 자동 실행한 뒤 서버를 시작.
+ * Node.js 번들링: 패키징 시 build/node/에 Node.js 풀 배포판(node + npm)을 포함.
+ * 시스템에 Node.js가 없어도 번들 바이너리로 npm install + 서버 실행 가능.
+ * 번들 Node.js 우선 → 시스템 Node.js 폴백 → 둘 다 없으면 에러.
+ * npm은 번들 npm-cli.js를 node로 직접 실행 (npm.cmd 의존 없음).
  *
  * PATH 복원: macOS GUI 앱은 터미널 PATH를 상속받지 못함.
  * 로그인 셸($SHELL -lc)에서 실제 PATH를 가져와 모든 child_process에 주입.
@@ -11,9 +13,6 @@
  * 데이터 영속성: 패키징 시 AGENTSALAD_STORE_DIR을 app.getPath('userData')/store로
  * 설정하여 앱 번들 외부에 DB/워크스페이스를 저장. 앱 업데이트 시에도 데이터 보존.
  * 레거시 데이터(앱 번들 내 store/)가 있으면 자동 마이그레이션.
- *
- * Windows 호환: Node.js v22+ 보안 패치(CVE-2024-27980)로 .cmd/.bat 파일의
- * 직접 spawn이 차단됨. npm.cmd 호출 시 shell: true 필수.
  *
  * 상태 흐름:
  *   stopped → (start)
@@ -56,6 +55,10 @@ export class ServerManager extends EventEmitter {
   private runningWatchTimer: ReturnType<typeof setInterval> | null = null;
   /** 로그인 셸에서 복원한 환경변수 (PATH 포함) */
   private shellEnv: Record<string, string> | null = null;
+  /** detectNode에서 확정된 node 바이너리 경로 */
+  private resolvedNodePath: string | null = null;
+  /** detectNode에서 확정된 npm-cli.js 경로 (null이면 시스템 npm 사용) */
+  private resolvedNpmCliPath: string | null = null;
 
   get status(): ServerStatus {
     return this._status;
@@ -255,52 +258,103 @@ export class ServerManager extends EventEmitter {
     }
   }
 
+  // ── 번들 Node.js 경로 ──────────────────────────────────────
+
+  /**
+   * 번들된 Node.js 바이너리 경로.
+   * 패키징: <resourcesPath>/node/bin/node (macOS/Linux) 또는 <resourcesPath>/node/node.exe (Windows)
+   * 개발: <appRoot>/build/node/bin/node
+   */
+  private getBundledNodePath(): string | null {
+    const isWin = process.platform === 'win32';
+    const base = app.isPackaged
+      ? path.join(process.resourcesPath, 'node')
+      : path.join(app.getAppPath(), 'build', 'node');
+
+    const nodePath = isWin
+      ? path.join(base, 'node.exe')
+      : path.join(base, 'bin', 'node');
+
+    return fs.existsSync(nodePath) ? nodePath : null;
+  }
+
+  /**
+   * 번들된 npm-cli.js 경로.
+   * macOS/Linux: <nodeDir>/lib/node_modules/npm/bin/npm-cli.js
+   * Windows: <nodeDir>/node_modules/npm/bin/npm-cli.js
+   */
+  private getBundledNpmCliPath(): string | null {
+    const isWin = process.platform === 'win32';
+    const base = app.isPackaged
+      ? path.join(process.resourcesPath, 'node')
+      : path.join(app.getAppPath(), 'build', 'node');
+
+    const npmCli = isWin
+      ? path.join(base, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+      : path.join(base, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+
+    return fs.existsSync(npmCli) ? npmCli : null;
+  }
+
   // ── Node.js 감지 ──────────────────────────────────────────
 
-  private detectNode(env: Record<string, string>): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.appendLog('[setup] Checking Node.js...');
-      const check = spawn('node', ['--version'], {
-        stdio: 'pipe',
-        env,
-      });
+  /**
+   * 번들 Node.js 우선 → 시스템 Node.js 폴백.
+   * 감지 성공 시 resolvedNodePath / resolvedNpmCliPath에 경로 저장.
+   */
+  private async detectNode(env: Record<string, string>): Promise<void> {
+    this.appendLog('[setup] Checking Node.js...');
+
+    // 1) 번들 Node.js 확인
+    const bundledNode = this.getBundledNodePath();
+    const bundledNpmCli = this.getBundledNpmCliPath();
+
+    if (bundledNode) {
+      const version = await this.getNodeVersion(bundledNode, env);
+      if (version) {
+        this.appendLog(`[setup] Bundled Node.js ${version} detected`);
+        this.resolvedNodePath = bundledNode;
+        this.resolvedNpmCliPath = bundledNpmCli;
+        return;
+      }
+      this.appendLog('[setup] Bundled Node.js exists but failed to execute, trying system...');
+    }
+
+    // 2) 시스템 Node.js 폴백
+    const systemVersion = await this.getNodeVersion('node', env);
+    if (systemVersion) {
+      const major = parseInt(systemVersion.replace('v', ''), 10);
+      if (major < 20) {
+        throw new Error(`System Node.js ${systemVersion} is too old. Version 20+ required.`);
+      }
+      this.appendLog(`[setup] System Node.js ${systemVersion} detected (fallback)`);
+      this.resolvedNodePath = 'node';
+      this.resolvedNpmCliPath = null;
+      return;
+    }
+
+    throw new Error(
+      'Node.js not found. Bundled Node.js missing and system Node.js not installed.',
+    );
+  }
+
+  private getNodeVersion(nodePath: string, env: Record<string, string>): Promise<string | null> {
+    return new Promise((resolve) => {
+      const check = spawn(nodePath, ['--version'], { stdio: 'pipe', env });
       let version = '';
-
-      check.stdout?.on('data', (d: Buffer) => {
-        version += d.toString().trim();
-      });
-
-      check.on('error', () => {
-        reject(
-          new Error(
-            'Node.js not found. Install Node.js 20+ from https://nodejs.org',
-          ),
-        );
-      });
-
-      check.on('exit', (code) => {
-        if (code !== 0) {
-          reject(new Error('Node.js check failed'));
-          return;
-        }
-        this.appendLog(`[setup] Node.js ${version} detected`);
-
-        const major = parseInt(version.replace('v', ''), 10);
-        if (major < 20) {
-          reject(
-            new Error(
-              `Node.js ${version} is too old. Version 20+ required.`,
-            ),
-          );
-          return;
-        }
-        resolve();
-      });
+      check.stdout?.on('data', (d: Buffer) => { version += d.toString().trim(); });
+      check.on('error', () => resolve(null));
+      check.on('exit', (code) => resolve(code === 0 && version ? version : null));
     });
   }
 
   // ── npm install ───────────────────────────────────────────
 
+  /**
+   * npm install 실행.
+   * 번들 npm-cli.js가 있으면 resolvedNodePath로 직접 실행 (시스템 npm 불필요).
+   * 없으면 시스템 npm 폴백.
+   */
   private runNpmInstall(
     appRoot: string,
     env: Record<string, string>,
@@ -309,17 +363,31 @@ export class ServerManager extends EventEmitter {
       this.appendLog('[setup] Installing dependencies (npm install)...');
       this.appendLog('[setup] This may take a minute on first launch.');
 
+      const nodePath = this.resolvedNodePath || 'node';
+      const npmCliPath = this.resolvedNpmCliPath;
       const isWin = process.platform === 'win32';
-      const child = spawn(
-        isWin ? 'npm.cmd' : 'npm',
-        ['install', '--production', '--no-optional'],
-        {
-          cwd: appRoot,
-          env,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          shell: isWin,
-        },
-      );
+
+      let cmd: string;
+      let args: string[];
+      let useShell = false;
+
+      if (npmCliPath) {
+        cmd = nodePath;
+        args = [npmCliPath, 'install', '--production', '--no-optional'];
+        this.appendLog(`[setup] Using bundled npm: ${nodePath} ${npmCliPath}`);
+      } else {
+        cmd = isWin ? 'npm.cmd' : 'npm';
+        args = ['install', '--production', '--no-optional'];
+        useShell = isWin;
+        this.appendLog('[setup] Using system npm');
+      }
+
+      const child = spawn(cmd, args, {
+        cwd: appRoot,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: useShell,
+      });
 
       // spawn의 timeout 옵션은 Windows에서 문제를 일으킬 수 있으므로 수동 구현
       let settled = false;
@@ -372,13 +440,14 @@ export class ServerManager extends EventEmitter {
     appRoot: string,
     env: Record<string, string>,
   ): void {
+    const nodePath = this.resolvedNodePath || 'node';
     const serverEntry = path.join(appRoot, 'dist', 'index.js');
-    this.appendLog(`[electron] Starting server: node ${serverEntry}`);
+    this.appendLog(`[electron] Starting server: ${nodePath} ${serverEntry}`);
 
     const storeDir = this.getStoreDir();
     this.appendLog(`[electron] Store directory: ${storeDir}`);
 
-    this.process = spawn('node', [serverEntry], {
+    this.process = spawn(nodePath, [serverEntry], {
       cwd: appRoot,
       env: {
         ...env,

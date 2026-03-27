@@ -320,12 +320,25 @@ All three channels use WebSocket/polling — **no public URL needed** for self-h
 - Requires 2 tokens: Bot User OAuth Token + App-Level Token
 - Web UI exposes `/api/integrations/slack/manifest` to prefill scopes, bot events, and Socket Mode via Slack App Manifest import
 
+## Message Routing (DM / Room / User-in-Room)
+
+서비스 매칭 우선순위:
+
+| 메시지 원점 | 매칭 순서 | 응답 목적지 |
+|------------|----------|-----------|
+| **DM** | 1. user 서비스 → 2. everyone 템플릿 (user 자동 생성) | DM |
+| **서버 채널(Room)** | 1. room 서비스 → 2. user 서비스 → 3. everyone 템플릿 (room 자동 생성) | Room |
+
+- **응답 라우팅은 타겟 타입이 아니라 메시지 원점 기반.** 방에서 온 메시지에 user 타겟이 매칭돼도 방으로 응답한다.
+- Discord/Slack에서 user 타겟은 DM뿐 아니라 서버 채널에서도 작동한다. 해당 유저가 방에서 말하면 봇이 방에서 응답.
+- Room 서비스가 있으면 room 서비스가 우선 (방 전체 대상). User 서비스는 room 서비스가 없을 때만 매칭.
+
 ## Everyone Template
 
 - `모두에게`는 실제 공유 타겟이 아니라 `에이전트 + 채널 + 모두에게` 조합으로 만드는 기본 자동 생성 템플릿이다.
 - Telegram/Discord/Slack 각 플랫폼마다 시스템 기본 타겟으로 항상 노출되며, 사용자가 수동 생성/삭제하지 않는다.
 - 새 DM 또는 room 메시지가 오면 해당 `userId` 또는 `roomId`로 실제 Target+Service가 생성된다.
-- 기존 명시적 타겟 서비스가 있으면 그 서비스가 우선 반응한다.
+- 기존 명시적 타겟 서비스(room 또는 user)가 있으면 그 서비스가 우선 반응한다.
 - Telegram은 DM만 지원하므로 everyone 템플릿이 새 발신자별 DM 서비스를 만든다.
 - Discord/Slack은 DM과 room 모두에서 같은 템플릿 규칙을 사용한다.
 - everyone 템플릿에 붙은 크론은 템플릿 자신에게 발송되지 않고, 같은 `agent + channel` 그룹의 활성 개별 서비스들에 fan-out 실행된다.
