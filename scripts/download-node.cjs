@@ -96,14 +96,26 @@ function main() {
         fs.rmSync(p, { recursive: true, force: true });
       }
     }
-    // corepack 제거
-    const corepackMod = path.join(outDir, 'lib', 'node_modules', 'corepack');
-    if (fs.existsSync(corepackMod)) {
-      fs.rmSync(corepackMod, { recursive: true, force: true });
-    }
-    const corepackModWin = path.join(outDir, 'node_modules', 'corepack');
-    if (fs.existsSync(corepackModWin)) {
-      fs.rmSync(corepackModWin, { recursive: true, force: true });
+
+    // corepack 제거 (모듈 + bin 심볼릭 링크/스크립트)
+    const corepackPaths = [
+      path.join(outDir, 'lib', 'node_modules', 'corepack'),
+      path.join(outDir, 'node_modules', 'corepack'),
+      path.join(outDir, 'bin', 'corepack'),
+      path.join(outDir, 'corepack'),
+      path.join(outDir, 'corepack.cmd'),
+    ];
+    for (const p of corepackPaths) {
+      try {
+        const stat = fs.lstatSync(p);
+        if (stat.isDirectory()) {
+          fs.rmSync(p, { recursive: true, force: true });
+        } else {
+          fs.unlinkSync(p);
+        }
+      } catch (_) {
+        // 존재하지 않으면 무시
+      }
     }
 
     // 아카이브 삭제
@@ -126,7 +138,11 @@ function getDirSizeMB(dirPath) {
     if (entry.isDirectory()) {
       total += getDirSizeMB(full);
     } else {
-      total += fs.statSync(full).size;
+      try {
+        total += fs.lstatSync(full).size;
+      } catch (_) {
+        // 댕글링 심볼릭 링크 등 무시
+      }
     }
   }
   return (total / 1048576).toFixed(1);
