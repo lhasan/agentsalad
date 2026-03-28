@@ -58,13 +58,17 @@ export async function checkClaudeCodeAuth(): Promise<ClaudeCodeAuthStatus> {
     execSync('which claude', { stdio: 'ignore' });
     result.installed = true;
   } catch {
-    result.error = 'Claude Code CLI not installed. Install: npm install -g @anthropic-ai/claude-code';
+    result.error =
+      'Claude Code CLI not installed. Install: npm install -g @anthropic-ai/claude-code';
     return result;
   }
 
   // 버전 확인
   try {
-    result.version = execSync('claude --version', { encoding: 'utf-8', timeout: 5000 }).trim();
+    result.version = execSync('claude --version', {
+      encoding: 'utf-8',
+      timeout: 5000,
+    }).trim();
   } catch {
     result.version = 'unknown';
   }
@@ -79,7 +83,8 @@ export async function checkClaudeCodeAuth(): Promise<ClaudeCodeAuthStatus> {
     const auth = JSON.parse(authJson);
     result.loggedIn = auth.loggedIn === true;
     result.authMethod = auth.authMethod || null;
-    result.apiKeyConfigured = auth.apiKeySource === 'ANTHROPIC_API_KEY' && auth.loggedIn;
+    result.apiKeyConfigured =
+      auth.apiKeySource === 'ANTHROPIC_API_KEY' && auth.loggedIn;
   } catch (err) {
     result.error = `Auth check failed: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -101,7 +106,10 @@ export async function checkClaudeCodeAuth(): Promise<ClaudeCodeAuthStatus> {
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes('Not logged in') || errMsg.includes('Invalid API key')) {
+      if (
+        errMsg.includes('Not logged in') ||
+        errMsg.includes('Invalid API key')
+      ) {
         result.loggedIn = false;
         result.error = 'OAuth session expired. Run: claude login';
       }

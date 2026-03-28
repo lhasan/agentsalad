@@ -4122,27 +4122,50 @@ export function startWebUiServer(
         return;
       }
 
-      // Claude Code CLI auth status
+      // Claude Code auth status (subscription token + CLI)
       if (
         url.pathname === '/api/integrations/claude-code/status' &&
         req.method === 'GET'
       ) {
         try {
-          const { checkClaudeCodeAuth } = await import('./providers/claude-code.js');
-          const status = await checkClaudeCodeAuth();
-          sendJson(res, 200, status);
+          const { getClaudeAuthReport } =
+            await import('./providers/claude-auth.js');
+          const report = getClaudeAuthReport();
+          sendJson(res, 200, report);
         } catch (err) {
           sendJson(res, 200, {
-            installed: false,
-            version: null,
-            loggedIn: false,
-            authMethod: null,
-            apiKeyConfigured: false,
+            hasToken: false,
+            tokenSource: 'error',
             error: err instanceof Error ? err.message : String(err),
           });
         }
         return;
       }
+
+      // Claude Code: save subscription token
+      if (
+        url.pathname === '/api/integrations/claude-code/token' &&
+        req.method === 'POST'
+      ) {
+        try {
+          const bodyObj = await readJsonBody(req);
+          const token = (bodyObj as Record<string, unknown>).token as string;
+          if (!token || typeof token !== 'string') {
+            sendJson(res, 400, { error: 'Token is required' });
+            return;
+          }
+          const { saveMaruToken } =
+            await import('./providers/claude-auth.js');
+          saveMaruToken(token, 'setup-token');
+          sendJson(res, 200, { ok: true });
+        } catch (err) {
+          sendJson(res, 500, {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        return;
+      }
+
 
       // Google integration status
       if (

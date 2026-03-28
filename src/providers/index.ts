@@ -21,12 +21,27 @@ import { logger } from '../logger.js';
 import { ProviderError, type ProviderErrorType } from '../types.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { createAnthropicModel } from './anthropic.js';
+
+/**
+ * Claude Code CLI 모델 별칭을 Anthropic API 모델명으로 해석.
+ * claude CLI는 sonnet/opus/haiku 별칭을 지원하지만,
+ * Anthropic API는 정식 모델명이 필요함.
+ */
+function resolveClaudeModelName(alias: string): string {
+  const map: Record<string, string> = {
+    sonnet: 'claude-sonnet-4-20250514',
+    opus: 'claude-opus-4-20250514',
+    haiku: 'claude-haiku-4-20250514',
+  };
+  return map[alias.toLowerCase()] || alias;
+}
 import { createOpenAIModel } from './openai.js';
 import { createGroqModel } from './groq.js';
 import { createOpenRouterModel } from './openrouter.js';
 import { createOpenCodeModel } from './opencode.js';
 import { createGoogleModel } from './google.js';
 import { streamClaudeCode, isClaudeCodeAvailable } from './claude-code.js';
+import { discoverAnthropicToken } from './claude-auth.js';
 
 export { buildSystemPrompt } from './system-prompt.js';
 
@@ -160,8 +175,82 @@ function extractErrorMessage(body: string): string | null {
  * API 에러 시 ProviderError를 throw.
  */
 export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
-  // --- Claude Code CLI 분기 ---
+  // --- Claude Code 분기: 구독 토큰 → Anthropic API 직접 호출 ---
   if (params.providerId === 'claude-code') {
+    // 토큰 자동 발견 (Maru 저장소 > OpenClaw > 환경변수)
+    const authResult = discoverAnthropicToken();
+
+    if (authResult.token) {
+      // 구독 토큰으로 Anthropic API 직접 호출 (Vercel AI SDK 경유)
+      const modelName = resolveClaudeModelName(params.model);
+
+      logger.info(
+        {
+          provider: 'claude-code',
+          model: modelName,
+          tokenSource: authResult.source,
+          expiresIn: authResult.expiresIn,
+          messageCount: params.messages.length,
+        },
+        'Using subscription token via Anthropic API',
+      );
+
+      const anthropicModel = createAnthropicModel({
+        model: modelName,
+        apiKey: authResult.token,
+      });
+
+      const systemPrompt = buildSystemPrompt(
+        params.agentSystemPrompt,
+        params.skillPrompts,
+        params.timeAware,
+        params.smartStep,
+        params.targetName,
+      );
+
+      const messages: ModelMessage[] = params.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      try {
+        const hasTools = params.tools && Object.keys(params.tools).length > 0;
+        const result = streamText({
+          model: anthropicModel,
+          system: systemPrompt,
+          messages,
+          ...(hasTools
+            ? { tools: params.tools, stopWhen: stepCountIs(10) }
+            : {}),
+          temperature: params.options?.temperature,
+          maxOutputTokens: params.options?.maxOutputTokens,
+        });
+
+        for await (const part of result.fullStream) {
+          if (part.type === 'text-delta') {
+            yield part.text;
+          } else if (part.type === 'error') {
+            throw part.error;
+          }
+        }
+      } catch (err) {
+        if (err instanceof ProviderError) throw err;
+        const classified = classifyApiError(err);
+        logger.warn(
+          {
+            provider: 'claude-code',
+            model: modelName,
+            errorType: classified.type,
+            tokenSource: authResult.source,
+          },
+          `Claude Code subscription auth error: ${classified.type}`,
+        );
+        throw classified;
+      }
+      return;
+    }
+
+    // 토큰 없으면 Claude Code CLI fallback
     const systemPrompt = buildSystemPrompt(
       params.agentSystemPrompt,
       params.skillPrompts,
@@ -170,7 +259,6 @@ export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
       params.targetName,
     );
 
-    // 대화 히스토리를 단일 프롬프트로 조합
     const conversationParts: string[] = [];
     for (const m of params.messages) {
       const prefix =
@@ -188,9 +276,9 @@ export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
         provider: 'claude-code',
         model: params.model,
         messageCount: params.messages.length,
-        promptLen: prompt.length,
+        fallback: 'cli',
       },
-      'Streaming chat via Claude Code CLI',
+      'No subscription token found, falling back to Claude Code CLI',
     );
 
     try {
@@ -206,17 +294,18 @@ export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.warn(
         { provider: 'claude-code', err: errMsg },
-        'Claude Code CLI error',
+        'Claude Code CLI fallback error',
       );
       throw new ProviderError(
         errMsg.includes('API key') ? 'auth' : 'unknown',
         undefined,
-        `⚠️ Claude Code CLI error: ${errMsg}`,
+        `⚠️ Claude Code error: ${errMsg}`,
         err,
       );
     }
     return;
   }
+
 
   // --- 기존 Vercel AI SDK 경로 ---
   const factory = getModelFactory(params.providerId);
