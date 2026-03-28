@@ -286,7 +286,7 @@ export function ensureSkillScript(skillId: string, toolName: string): string {
 
   if (!existsSync(shPath)) {
     const shTemplate = `#!/bin/bash
-# ${toolName} — Agent Salad Custom Skill
+# ${toolName} — Maru Custom Skill
 # 상세 지침: 같은 폴더의 GUIDE.md 참조
 
 SKILL_DIR=$(dirname "$0")
@@ -303,7 +303,7 @@ echo "TODO: ${toolName} — 이 파일을 편집하세요. GUIDE.md를 읽고 �
 
   if (!existsSync(cmdPath)) {
     const cmdTemplate = `@echo off\r
-REM ${toolName} — Agent Salad Custom Skill\r
+REM ${toolName} — Maru Custom Skill\r
 REM 상세 지침: 같은 폴더의 GUIDE.md 참조\r
 \r
 set "SKILL_DIR=%~dp0"\r
@@ -346,7 +346,7 @@ echo TODO: ${toolName} — 이 파일을 편집하세요. GUIDE.md를 읽고 구
 }
 
 function buildGuideContent(toolName: string, skillId: string): string {
-  return `# ${toolName} — Agent Salad Custom Skill Guide
+  return `# ${toolName} — Maru Custom Skill Guide
 
 이 문서는 **사람**과 **LLM 에이전트** 모두를 위한 스킬 구현 지침서입니다.
 이 폴더의 파일을 직접 편집하거나, LLM에게 이 파일을 보여주고 구현을 요청하세요.

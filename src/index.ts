@@ -1,5 +1,5 @@
 /**
- * Agent Salad — Main Orchestrator
+ * Maru — Main Orchestrator
  *
  * Agent + Channel + Target = Service 모델 기반.
  * Target은 user/room 외에 everyone(기본 자동 생성 템플릿)도 지원한다.
@@ -823,7 +823,7 @@ async function main(): Promise<void> {
   const services = listServices().filter((s) => s.status === 'active');
   logger.info(
     { connectedChannels: channelInfo.count, activeServices: services.length },
-    'Agent Salad running',
+    'Maru running',
   );
 
   if (channelInfo.count === 0 && WEB_UI_ENABLED) {
@@ -840,7 +840,7 @@ const isDirectRun =
 
 if (isDirectRun) {
   main().catch((err) => {
-    logger.error({ err }, 'Failed to start Agent Salad');
+    logger.error({ err }, 'Failed to start Maru');
     process.exit(1);
   });
 }

@@ -111,7 +111,7 @@ function showUpdateNotification(info: UpdateInfo): void {
   if (!Notification.isSupported()) return;
 
   const notification = new Notification({
-    title: 'Agent Salad 업데이트',
+    title: 'Maru 업데이트',
     body: `새 버전 v${info.latestVersion}이 있습니다. (현재 v${info.currentVersion})`,
   });
 

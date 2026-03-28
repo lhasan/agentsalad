@@ -173,7 +173,12 @@ export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
     // 대화 히스토리를 단일 프롬프트로 조합
     const conversationParts: string[] = [];
     for (const m of params.messages) {
-      const prefix = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System';
+      const prefix =
+        m.role === 'user'
+          ? 'User'
+          : m.role === 'assistant'
+            ? 'Assistant'
+            : 'System';
       conversationParts.push(`[${prefix}]: ${m.content}`);
     }
     const prompt = conversationParts.join('\n\n');
@@ -199,7 +204,10 @@ export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      logger.warn({ provider: 'claude-code', err: errMsg }, 'Claude Code CLI error');
+      logger.warn(
+        { provider: 'claude-code', err: errMsg },
+        'Claude Code CLI error',
+      );
       throw new ProviderError(
         errMsg.includes('API key') ? 'auth' : 'unknown',
         undefined,

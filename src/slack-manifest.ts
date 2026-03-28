@@ -1,7 +1,7 @@
 /**
  * Slack App Manifest helper
  *
- * Agent Salad Slack 채널 연동에 필요한 최소 권한/이벤트/Socket Mode 설정을
+ * Maru Slack 채널 연동에 필요한 최소 권한/이벤트/Socket Mode 설정을
  * 공식 App Manifest 형식으로 제공한다.
  * 최근 수정: Slack 온보딩 복잡도를 줄이기 위해 Web UI에서 바로 내려받을
  * 수 있는 manifest JSON 생성기를 추가했고, app/bot 이름은 사용자 입력값으로
@@ -34,7 +34,7 @@ export function getSlackAppManifest(input?: {
   appName?: string;
   botName?: string;
 }): Record<string, unknown> {
-  const appName = normalizeSlackName(input?.appName, 'My Agent Salad App');
+  const appName = normalizeSlackName(input?.appName, 'My Maru App');
   const botName = normalizeSlackName(input?.botName, appName);
   return {
     _metadata: {

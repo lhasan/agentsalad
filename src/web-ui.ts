@@ -1,5 +1,5 @@
 /**
- * Agent Salad — Admin Dashboard
+ * Maru — Admin Dashboard
  *
  * 단일 페이지 UI (라이트 테마 + 샐러드 메타포 + 4개국어 i18n: EN/KO/JA/ZH)
  * My Salads 탭: 서비스 카드 + 크론 영역 + 3열 블록 그리드 (에이전트/채널/대상)
@@ -248,7 +248,7 @@ function buildDashboardHtml(): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Agent Salad</title>
+<title>Maru</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -593,7 +593,7 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
     <div class="logo">Agent<b>Salad</b></div>
-    <a class="logo-help" id="logoHelp" href="#" onclick="event.preventDefault();$('aboutModal').classList.add('show')" title="What is Agent Salad?">?</a>
+    <a class="logo-help" id="logoHelp" href="#" onclick="event.preventDefault();$('aboutModal').classList.add('show')" title="What is Maru?">?</a>
   </div>
   <div class="sidebar-blocks">
     <div class="block-col ag" id="agCol">
@@ -761,7 +761,7 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 <!-- About Modal -->
 <div class="modal-bg" id="aboutModal" onclick="if(event.target===this)this.classList.remove('show')">
   <div class="modal" style="max-width:520px">
-    <h3 id="aboutTitleEl">What is Agent Salad?</h3>
+    <h3 id="aboutTitleEl">What is Maru?</h3>
     <div style="font-size:.88rem;line-height:1.7;color:var(--t2)">
       <p id="aboutP1El"></p>
       <p style="margin-top:10px" id="aboutP2El"></p>
@@ -891,7 +891,7 @@ en:{
   gogDetected:'gog CLI detected. Google skills available.',
   gogNotFound:'gog CLI not found. Install to enable Google skills (Gmail, Calendar, Drive).',
   gogSetupSteps:'Setup steps:',
-  gogExplain:'gog is a command-line tool that provides OAuth2-authenticated access to Google APIs (Gmail, Calendar, Drive). Agent Salad uses gog CLI to connect to Google services.',
+  gogExplain:'gog is a command-line tool that provides OAuth2-authenticated access to Google APIs (Gmail, Calendar, Drive). Maru uses gog CLI to connect to Google services.',
   gogGcpGuide:'Google Cloud Console setup:',
   gogGcpStep1:'Create a project at console.cloud.google.com',
   gogGcpStep2:'Enable Gmail API, Calendar API, Drive API',
@@ -911,7 +911,7 @@ en:{
   builtinSkillNote:'Built-in skills are managed per agent in the Agents tab.',
   skillCategory:'Category',noSkills:'No skills yet',
   // About modal
-  aboutTitle:'What is Agent Salad?',
+  aboutTitle:'What is Maru?',
   aboutP1:'A platform to create your own AI service by combining an <b>Agent</b> (AI brain) + <b>Channel</b> (messenger bot) + <b>Target</b> (user).',
   aboutP2:'Just like making a salad — pick your ingredients and mix them together.',
   aboutStep1:'Create an <b>Agent</b> to define the AI personality and role',
@@ -921,7 +921,7 @@ en:{
   aboutP3:'Add schedules to let your agent work automatically at set times.',
   // Header / buttons
   apiKeySetup:'API Key Settings',serverShutdown:'Shut Down Server',
-  logoHelp:'What is Agent Salad?',addAgent:'+ Create Agent',createAgent:'+ Create Agent',
+  logoHelp:'What is Maru?',addAgent:'+ Create Agent',createAgent:'+ Create Agent',
   cronDesc:'Create a schedule and attach it to a salad. It will run tasks at the set time. Drag a schedule onto a salad to connect.',
   // Form hints
   agentNameHint:'Give your agent a name to identify it.',phAgentName:'e.g. English Tutor',
@@ -955,14 +955,14 @@ en:{
     +'<li>Enter any name, add scope <code>connections:write</code>.</li>'
     +'<li>Copy the generated <b>App-Level Token</b> (starts with <code>xapp-</code>) and paste it here.</li>'
     +'</ol>',
-  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'1. After entering the channel name, open this <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>. The app name and bot name default to <b>{defaultName}</b>.<br>2. In Slack, choose <b>Create New App</b> → <b>From an app manifest</b> and paste it. If you want a different bot identity, change the name fields there before creating the app.',
+  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Maru Bot',slackManifestHint:'1. After entering the channel name, open this <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>. The app name and bot name default to <b>{defaultName}</b>.<br>2. In Slack, choose <b>Create New App</b> → <b>From an app manifest</b> and paste it. If you want a different bot identity, change the name fields there before creating the app.',
   platformSelectHint:'Select the messaging platform.',
   platformUserIdHint:'Send a message to <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> on Telegram to find your numeric user ID.',phPlatformUserId:'e.g. 123456789',
   platformUserIdHintDiscord:'Discord → Settings → Advanced → turn on <b>Developer Mode</b>. Then right-click a user → <b>Copy User ID</b> (a long number like <code>284102390284</code>).',
   platformUserIdHintSlack:'Click a user\\'s name in Slack → <b>View full profile</b> → click <b>⋮</b> (more) → <b>Copy member ID</b> (like <code>U04ABCDEF</code>).',
   nicknameHint:'A friendly name to recognize this person.',phNickname:'e.g. John',
   targetType:'Target Type',targetTypeHint:'User = DM target, Room = channel/thread target, Everyone = default auto-create template.',
-  targetTypeUser:'User (DM)',targetTypeRoom:'Room (Channel)',targetTypeEveryone:'Everyone (Template)',everyoneTarget:'Everyone',everyoneTargetHint:'Creates a default template for this platform. When a new DM or room message arrives, Agent Salad will auto-create a real target and salad for that user/channel.',
+  targetTypeUser:'User (DM)',targetTypeRoom:'Room (Channel)',targetTypeEveryone:'Everyone (Template)',everyoneTarget:'Everyone',everyoneTargetHint:'Creates a default template for this platform. When a new DM or room message arrives, Maru will auto-create a real target and salad for that user/channel.',
   everyoneCrons:'Everyone Schedules',individualCrons:'Individual Schedules',noChildServices:'No individual salads yet.',
   roomId:'Channel/Room ID',roomIdHintDiscord:'Turn on Developer Mode in Discord Settings → right-click the channel → <b>Copy Channel ID</b>.',roomIdHintSlack:'Open channel details in Slack → scroll to the bottom → copy the <b>Channel ID</b> (like <code>C04ABCDEF</code>).',
   autoSession:'Auto Session',autoSessionHint:'Automatically create sessions when new users/rooms interact with the bot.',
@@ -1084,7 +1084,7 @@ ko:{
   gogDetected:'gog CLI가 감지되었습니다. Google 스킬을 사용할 수 있습니다.',
   gogNotFound:'gog CLI를 찾을 수 없습니다. Google 스킬을 사용하려면 설치하세요.',
   gogSetupSteps:'설정 단계:',
-  gogExplain:'gog는 Google API(Gmail, Calendar, Drive)에 OAuth2 인증으로 접근할 수 있게 해주는 커맨드라인 도구입니다. Agent Salad의 Google 스킬은 gog CLI를 통해 Google 서비스에 접근합니다.',
+  gogExplain:'gog는 Google API(Gmail, Calendar, Drive)에 OAuth2 인증으로 접근할 수 있게 해주는 커맨드라인 도구입니다. Maru의 Google 스킬은 gog CLI를 통해 Google 서비스에 접근합니다.',
   gogGcpGuide:'Google Cloud Console 설정:',
   gogGcpStep1:'console.cloud.google.com에서 프로젝트 생성',
   gogGcpStep2:'Gmail API, Calendar API, Drive API 활성화',
@@ -1145,14 +1145,14 @@ ko:{
     +'<li>이름은 아무거나 넣고, 스코프는 <code>connections:write</code> 하나만 추가하세요.</li>'
     +'<li>생성된 <b>App-Level Token</b> (<code>xapp-</code>)을 여기 붙여넣으세요.</li>'
     +'</ol>',
-  appToken:'앱 레벨 토큰',slackManifest:'Slack 매니페스트',slackManifestDefaultName:'내 Agent Salad 봇',slackManifestHint:'1단계: 채널 이름을 먼저 적고, 이 <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>을 여세요. 앱 이름과 봇 이름은 기본적으로 <b>{defaultName}</b>으로 들어갑니다.<br>2단계: Slack에서 <b>Create New App</b> → <b>From an app manifest</b>를 누르고 붙여넣으세요. 다른 봇 이름을 쓰고 싶으면 붙여넣은 뒤 name 값을 바꾸면 됩니다.',
+  appToken:'앱 레벨 토큰',slackManifest:'Slack 매니페스트',slackManifestDefaultName:'내 Maru 봇',slackManifestHint:'1단계: 채널 이름을 먼저 적고, 이 <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>을 여세요. 앱 이름과 봇 이름은 기본적으로 <b>{defaultName}</b>으로 들어갑니다.<br>2단계: Slack에서 <b>Create New App</b> → <b>From an app manifest</b>를 누르고 붙여넣으세요. 다른 봇 이름을 쓰고 싶으면 붙여넣은 뒤 name 값을 바꾸면 됩니다.',
   platformSelectHint:'메시지를 전달할 플랫폼을 선택하세요.',
   platformUserIdHint:'Telegram에서 <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>에게 메시지를 보내면 숫자 ID를 확인할 수 있습니다.',phPlatformUserId:'예: 123456789',
   platformUserIdHintDiscord:'Discord → 설정 → 고급 → <b>개발자 모드</b> 켜기. 유저 우클릭 → <b>사용자 ID 복사</b> (<code>284102390284</code> 같은 긴 숫자).',
   platformUserIdHintSlack:'Slack에서 유저 이름 클릭 → <b>전체 프로필 보기</b> → <b>⋮</b> (더 보기) → <b>멤버 ID 복사</b> (<code>U04ABCDEF</code> 형태).',
   nicknameHint:'누구인지 알아볼 수 있는 별명을 적어주세요.',phNickname:'예: 태형이',
   targetType:'타겟 유형',targetTypeHint:'유저 = DM 대상, 방 = 채널/스레드 대상, 모두에게 = 기본 자동 생성 템플릿.',
-  targetTypeUser:'유저 (DM)',targetTypeRoom:'방 (채널)',targetTypeEveryone:'모두에게 (템플릿)',everyoneTarget:'모두에게',everyoneTargetHint:'이 플랫폼의 기본 템플릿을 만듭니다. 새 DM이나 방 메시지가 들어오면 Agent Salad가 해당 유저/채널용 실제 대상과 샐러드를 자동 생성합니다.',
+  targetTypeUser:'유저 (DM)',targetTypeRoom:'방 (채널)',targetTypeEveryone:'모두에게 (템플릿)',everyoneTarget:'모두에게',everyoneTargetHint:'이 플랫폼의 기본 템플릿을 만듭니다. 새 DM이나 방 메시지가 들어오면 Maru가 해당 유저/채널용 실제 대상과 샐러드를 자동 생성합니다.',
   everyoneCrons:'모두에게 예약',individualCrons:'개별 예약',noChildServices:'아직 개별 샐러드가 없습니다.',
   roomId:'채널/방 ID',roomIdHintDiscord:'Discord 설정에서 개발자 모드 켜기 → 채널 우클릭 → <b>채널 ID 복사</b>.',roomIdHintSlack:'Slack에서 채널 상세 열기 → 하단으로 스크롤 → <b>채널 ID</b> 복사 (<code>C04ABCDEF</code> 형태).',
   autoSession:'자동 세션',autoSessionHint:'새로운 유저나 방이 봇과 대화하면 자동으로 세션을 생성합니다.',
@@ -1269,7 +1269,7 @@ ja:{
   gogDetected:'gog CLIが検出されました。Googleスキルが利用可能です。',
   gogNotFound:'gog CLIが見つかりません。Googleスキルを使用するにはインストールしてください。',
   gogSetupSteps:'セットアップ手順:',
-  gogExplain:'gogはGoogle API（Gmail、Calendar、Drive）にOAuth2認証でアクセスするためのコマンドラインツールです。Agent SaladのGoogleスキルはgog CLIを通じてGoogleサービスに接続します。',
+  gogExplain:'gogはGoogle API（Gmail、Calendar、Drive）にOAuth2認証でアクセスするためのコマンドラインツールです。MaruのGoogleスキルはgog CLIを通じてGoogleサービスに接続します。',
   gogGcpGuide:'Google Cloud Console設定:',
   gogGcpStep1:'console.cloud.google.comでプロジェクトを作成',
   gogGcpStep2:'Gmail API、Calendar API、Drive APIを有効化',
@@ -1288,7 +1288,7 @@ ja:{
   skillType:'タイプ',skillAvailable:'利用可能',skillNotAvailable:'利用不可',
   builtinSkillNote:'内蔵スキルはエージェントタブでエージェントごとに管理します。',
   skillCategory:'カテゴリ',noSkills:'まだスキルがありません',
-  aboutTitle:'Agent Saladとは？',
+  aboutTitle:'Maruとは？',
   aboutP1:'<b>エージェント</b>（AI頭脳）+ <b>チャンネル</b>（メッセンジャーボット）+ <b>ターゲット</b>（ユーザー）を組み合わせて自分だけのAIサービスを作るプラットフォームです。',
   aboutP2:'サラダを作るように、好きな材料を選んで混ぜるだけです。',
   aboutStep1:'<b>エージェント</b>を作ってAIの性格と役割を決め',
@@ -1297,7 +1297,7 @@ ja:{
   aboutStep4:'3つをドラッグして<b>サラダ</b>を完成させましょう！',
   aboutP3:'スケジュールを追加すると、決まった時間にエージェントが自動で作業します。',
   apiKeySetup:'APIキー設定',serverShutdown:'サーバー停止',
-  logoHelp:'Agent Saladとは？',addAgent:'+ エージェント作成',createAgent:'+ エージェント作成',
+  logoHelp:'Maruとは？',addAgent:'+ エージェント作成',createAgent:'+ エージェント作成',
   cronDesc:'スケジュールを作ってサラダに接続すると、決まった時間にタスクを実行します。ドラッグしてサラダに接続しましょう。',
   agentNameHint:'エージェントを識別する名前を付けてください。',phAgentName:'例: 英語の先生',
   agentDescHint:'このエージェントが何をするかメモしてください。',phAgentDesc:'例: 英会話を助けるエージェント',
@@ -1330,14 +1330,14 @@ ja:{
     +'<li>名前は何でもOK、スコープは<code>connections:write</code>を1つ追加。</li>'
     +'<li>生成された<b>App-Level Token</b>（<code>xapp-</code>）をここに貼り付けてください。</li>'
     +'</ol>',
-  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'まずチャンネル名を入力してから、この <a href="{manifestUrl}" target="_blank" download>manifest JSON</a> を開いてください。アプリ名とボット名は既定で <b>{defaultName}</b> になります。Slack の <b>Create New App</b> → <b>From an app manifest</b> で貼り付け、別名にしたい場合は name を変更してください。',
+  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Maru Bot',slackManifestHint:'まずチャンネル名を入力してから、この <a href="{manifestUrl}" target="_blank" download>manifest JSON</a> を開いてください。アプリ名とボット名は既定で <b>{defaultName}</b> になります。Slack の <b>Create New App</b> → <b>From an app manifest</b> で貼り付け、別名にしたい場合は name を変更してください。',
   platformSelectHint:'メッセージを送るプラットフォームを選んでください。',
   platformUserIdHint:'Telegramで<a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>にメッセージを送ると数字IDが分かります。',phPlatformUserId:'例: 123456789',
   platformUserIdHintDiscord:'Discord → 設定 → 詳細設定 → <b>開発者モード</b>をオン。ユーザーを右クリック → <b>ユーザーIDをコピー</b>（<code>284102390284</code>のような長い数字）。',
   platformUserIdHintSlack:'Slackでユーザー名をクリック → <b>プロフィール全体を表示</b> → <b>⋮</b> → <b>メンバーIDをコピー</b>（<code>U04ABCDEF</code>形式）。',
   nicknameHint:'この人を識別できるニックネームを付けてください。',phNickname:'例: 太郎',
   targetType:'ターゲットタイプ',targetTypeHint:'ユーザー = DM対象、ルーム = チャンネル/スレッド対象、Everyone = 自動生成テンプレート。',
-  targetTypeUser:'ユーザー (DM)',targetTypeRoom:'ルーム (チャンネル)',targetTypeEveryone:'Everyone (テンプレート)',everyoneTarget:'Everyone',everyoneTargetHint:'このプラットフォームのデフォルトテンプレートを作成します。新しいDMやルームメッセージが来ると、Agent Salad がそのユーザー/チャンネル用の実ターゲットとサラダを自動生成します。',
+  targetTypeUser:'ユーザー (DM)',targetTypeRoom:'ルーム (チャンネル)',targetTypeEveryone:'Everyone (テンプレート)',everyoneTarget:'Everyone',everyoneTargetHint:'このプラットフォームのデフォルトテンプレートを作成します。新しいDMやルームメッセージが来ると、Maru がそのユーザー/チャンネル用の実ターゲットとサラダを自動生成します。',
   everyoneCrons:'Everyone Schedules',individualCrons:'Individual Schedules',noChildServices:'個別サラダはまだありません。',
   roomId:'チャンネル/ルームID',roomIdHintDiscord:'Discordの設定で開発者モードをオンにして、チャンネルを右クリック → <b>チャンネルIDをコピー</b>。',roomIdHintSlack:'Slackでチャンネル詳細を開く → 下部にスクロール → <b>チャンネルID</b>をコピー（<code>C04ABCDEF</code>形式）。',
   autoSession:'自動セッション',autoSessionHint:'新しいユーザーやルームがボットと会話すると自動的にセッションを作成します。',
@@ -1453,7 +1453,7 @@ zh:{
   gogDetected:'已检测到gog CLI。Google技能可用。',
   gogNotFound:'未找到gog CLI。安装后可启用Google技能。',
   gogSetupSteps:'设置步骤:',
-  gogExplain:'gog是一个通过OAuth2认证访问Google API（Gmail、Calendar、Drive）的命令行工具。Agent Salad的Google技能通过gog CLI连接Google服务。',
+  gogExplain:'gog是一个通过OAuth2认证访问Google API（Gmail、Calendar、Drive）的命令行工具。Maru的Google技能通过gog CLI连接Google服务。',
   gogGcpGuide:'Google Cloud Console设置:',
   gogGcpStep1:'在console.cloud.google.com中创建项目',
   gogGcpStep2:'启用Gmail API、Calendar API、Drive API',
@@ -1472,7 +1472,7 @@ zh:{
   skillType:'类型',skillAvailable:'可用',skillNotAvailable:'不可用',
   builtinSkillNote:'内置技能在代理标签页中按代理进行管理。',
   skillCategory:'类别',noSkills:'暂无技能',
-  aboutTitle:'Agent Salad是什么？',
+  aboutTitle:'Maru是什么？',
   aboutP1:'将<b>代理</b>（AI大脑）+ <b>频道</b>（消息机器人）+ <b>目标</b>（用户）组合起来，创建专属AI服务的平台。',
   aboutP2:'就像做沙拉一样，选择你喜欢的食材混合在一起。',
   aboutStep1:'创建<b>代理</b>，定义AI的性格和角色',
@@ -1481,7 +1481,7 @@ zh:{
   aboutStep4:'将三者拖拽组合成<b>沙拉</b>！',
   aboutP3:'添加定时任务后，代理会在预定时间自动工作。',
   apiKeySetup:'API密钥设置',serverShutdown:'关闭服务器',
-  logoHelp:'Agent Salad是什么？',addAgent:'+ 创建代理',createAgent:'+ 创建代理',
+  logoHelp:'Maru是什么？',addAgent:'+ 创建代理',createAgent:'+ 创建代理',
   cronDesc:'创建定时任务并连接到沙拉，会在预定时间执行任务。拖拽定时任务到沙拉上连接。',
   agentNameHint:'给代理起一个名字以便识别。',phAgentName:'例: 英语老师',
   agentDescHint:'记录这个代理是做什么的。',phAgentDesc:'例: 帮助英语会话的代理',
@@ -1514,14 +1514,14 @@ zh:{
     +'<li>名称随意，添加范围 <code>connections:write</code>。</li>'
     +'<li>复制生成的 <b>App-Level Token</b>（<code>xapp-</code>开头）粘贴到这里。</li>'
     +'</ol>',
-  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Agent Salad Bot',slackManifestHint:'先输入频道名称，再打开这个 <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>。应用名和机器人名默认会使用 <b>{defaultName}</b>。在 Slack 中选择 <b>Create New App</b> → <b>From an app manifest</b> 后粘贴；如果想用别的机器人名字，粘贴后修改 name 即可。',
+  appToken:'App-Level Token',slackManifest:'Slack Manifest',slackManifestDefaultName:'My Maru Bot',slackManifestHint:'先输入频道名称，再打开这个 <a href="{manifestUrl}" target="_blank" download>manifest JSON</a>。应用名和机器人名默认会使用 <b>{defaultName}</b>。在 Slack 中选择 <b>Create New App</b> → <b>From an app manifest</b> 后粘贴；如果想用别的机器人名字，粘贴后修改 name 即可。',
   platformSelectHint:'选择消息平台。',
   platformUserIdHint:'在Telegram中向<a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>发消息可查看数字ID。',phPlatformUserId:'例: 123456789',
   platformUserIdHintDiscord:'Discord → 设置 → 高级 → 开启<b>开发者模式</b>。右键用户 → <b>复制用户ID</b>（类似 <code>284102390284</code> 的长数字）。',
   platformUserIdHintSlack:'点击Slack中的用户名 → <b>查看完整资料</b> → <b>⋮</b> → <b>复制成员ID</b>（类似 <code>U04ABCDEF</code>）。',
   nicknameHint:'写一个容易辨认的昵称。',phNickname:'例: 小明',
   targetType:'目标类型',targetTypeHint:'用户 = DM对象，房间 = 频道/线程对象，Everyone = 默认自动创建模板。',
-  targetTypeUser:'用户 (DM)',targetTypeRoom:'房间 (频道)',targetTypeEveryone:'Everyone (模板)',everyoneTarget:'Everyone',everyoneTargetHint:'为该平台创建默认模板。收到新的 DM 或房间消息时，Agent Salad 会自动为对应用户/频道创建真实目标和沙拉。',
+  targetTypeUser:'用户 (DM)',targetTypeRoom:'房间 (频道)',targetTypeEveryone:'Everyone (模板)',everyoneTarget:'Everyone',everyoneTargetHint:'为该平台创建默认模板。收到新的 DM 或房间消息时，Maru 会自动为对应用户/频道创建真实目标和沙拉。',
   everyoneCrons:'Everyone Schedules',individualCrons:'Individual Schedules',noChildServices:'还没有单独的沙拉。',
   roomId:'频道/房间ID',roomIdHintDiscord:'在Discord设置中开启开发者模式 → 右键频道 → <b>复制频道ID</b>。',roomIdHintSlack:'在Slack中打开频道详情 → 滚动到底部 → 复制<b>频道ID</b>（如 <code>C04ABCDEF</code>）。',
   autoSession:'自动会话',autoSessionHint:'新用户或房间与机器人交互时自动创建会话。',
@@ -1565,7 +1565,7 @@ zh:{
   confirmClearLogs:'清除所有错误日志？',
 },
 };
-let _lang=localStorage.getItem('agent-salad-lang')||(navigator.language.startsWith('ko')?'ko':navigator.language.startsWith('ja')?'ja':navigator.language.startsWith('zh')?'zh':'en');
+let _lang=localStorage.getItem('maru-lang')||(navigator.language.startsWith('ko')?'ko':navigator.language.startsWith('ja')?'ja':navigator.language.startsWith('zh')?'zh':'en');
 function t(k){const l=I18N[_lang];if(l&&l[k]!==undefined)return l[k];if(I18N.en[k]!==undefined)return I18N.en[k];return k}
 function svcDescHtml(ag,ch,tg){
   const e=s=>{const d=document.createElement('div');d.textContent=s;return d.innerHTML};
@@ -1582,7 +1582,7 @@ function svcDescMultiHtml(ag,ch,tgNames){
     .replace('{channel}','<span class="svc-ch">'+e(ch)+'</span>')
     .replace('{targets}',tgSpans);
 }
-function setLang(l){_lang=l;localStorage.setItem('agent-salad-lang',l);document.documentElement.lang=l;applyLang();load()}
+function setLang(l){_lang=l;localStorage.setItem('maru-lang',l);document.documentElement.lang=l;applyLang();load()}
 function applyLang(){
   const s=$('langSelect');if(s)s.value=_lang;
   const m={secActive:'activeServices',secSaladDesc:'saladDesc',useCaseLink:'useCaseLink',secCreate:'createServiceDrag',secCreateDesc:'createServiceDesc',
@@ -1656,8 +1656,8 @@ const api=async(p,m,b)=>{const o={method:m||'GET',headers:{}};if(b){o.headers['C
 let D={};
 let slots={agent:null,channel:null,targets:[]};
 const UI_EVERYONE_ID='__ui_everyone__';
-const TARGET_LIST_FILTER_KEY='agent-salad-hide-public-targets';
-const CRON_LIST_FILTER_KEY='agent-salad-hide-public-crons';
+const TARGET_LIST_FILTER_KEY='maru-hide-public-targets';
+const CRON_LIST_FILTER_KEY='maru-hide-public-crons';
 let hidePublicTargets=localStorage.getItem(TARGET_LIST_FILTER_KEY)==='1';
 let hidePublicCrons=localStorage.getItem(CRON_LIST_FILTER_KEY)==='1';
 
@@ -4141,7 +4141,7 @@ export function startWebUiServer(
         res.writeHead(200, {
           'Content-Type': 'application/json; charset=utf-8',
           'Content-Disposition':
-            'attachment; filename="agentsalad-slack-manifest.json"',
+            'attachment; filename="maru-slack-manifest.json"',
           'Cache-Control': 'no-cache, no-store',
         });
         res.end(manifestJson);

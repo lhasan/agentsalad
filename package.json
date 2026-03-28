@@ -1,7 +1,7 @@
 {
-  "name": "agentsalad",
+  "name": "maru",
   "version": "0.1.5",
-  "description": "Multi-provider AI agent platform served through messenger channels.",
+  "description": "Maru - Your personal AI assistant platform. Run AI agents through messengers with a visual dashboard.",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist-electron/main.js",

@@ -1,5 +1,5 @@
 /**
- * Agent Salad - Database Layer
+ * Maru - Database Layer
  *
  * 단일 SQLite DB (store/messages.db)로 모든 상태 관리.
  * Agent + Channel + Target = Service 모델. Target은 user(DM), room(채널/스레드),

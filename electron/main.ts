@@ -1,5 +1,5 @@
 /**
- * Agent Salad - Electron Main Process
+ * Maru - Electron Main Process
  *
  * 서버 프로세스를 child_process로 관리하고,
  * BrowserWindow에 상태 페이지 또는 웹 UI를 표시.
@@ -129,7 +129,7 @@ async function createWindow(): Promise<void> {
     height: 860,
     minWidth: 800,
     minHeight: 600,
-    title: 'Agent Salad',
+    title: 'Maru',
     icon: iconPath,
     show: false,
     webPreferences: {
@@ -211,7 +211,7 @@ function showWindow(): void {
 
 function createTray(): void {
   tray = new Tray(TRAY_ICONS.stopped);
-  tray.setToolTip('Agent Salad — Stopped');
+  tray.setToolTip('Maru — Stopped');
   updateTrayMenu();
 
   // macOS: 트레이 클릭 = 컨텍스트 메뉴 (OS 표준). click 핸들러에서
@@ -266,7 +266,7 @@ function updateTrayMenu(): void {
     },
     { type: 'separator' },
     {
-      label: 'Quit Agent Salad',
+      label: 'Quit Maru',
       click: () => {
         isQuitting = true;
         void serverManager.stop().finally(() => {
@@ -284,11 +284,11 @@ function updateTrayForStatus(status: ServerStatus): void {
   if (icon) tray?.setImage(icon);
 
   const labels: Record<ServerStatus, string> = {
-    stopped: 'Agent Salad — Stopped',
-    checking: 'Agent Salad — Checking...',
-    starting: 'Agent Salad — Starting...',
-    running: 'Agent Salad — Running',
-    error: 'Agent Salad — Error',
+    stopped: 'Maru — Stopped',
+    checking: 'Maru — Checking...',
+    starting: 'Maru — Starting...',
+    running: 'Maru — Running',
+    error: 'Maru — Error',
   };
   tray?.setToolTip(labels[status]);
   updateTrayMenu();

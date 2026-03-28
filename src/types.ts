@@ -1,5 +1,5 @@
 /**
- * Agent Salad - Type Definitions
+ * Maru - Type Definitions
  *
  * Agent + Channel + Target = Service. 3요소 결합으로 서비스 활성화.
  * 멀티채널: Telegram, Discord, Slack 지원. ChannelType 유니온으로 확장.
