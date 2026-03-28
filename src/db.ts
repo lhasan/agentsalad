@@ -409,6 +409,13 @@ function ensureDefaultProviders(): void {
       base_url: 'https://opencode.ai/zen/v1',
       auth_scheme: 'bearer' as const,
     },
+    {
+      id: 'claude-code',
+      provider_key: 'claude-code',
+      name: 'Claude Code CLI',
+      base_url: '',
+      auth_scheme: 'bearer' as const,
+    },
   ];
   for (const p of defaults) {
     db.prepare(

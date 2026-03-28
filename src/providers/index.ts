@@ -5,7 +5,7 @@
  * 프록시 없이 직접 연결하므로 레이턴시가 최소.
  * Tool calling 지원: tools + stopWhen(stepCountIs) 으로 멀티스텝 자동 처리.
  *
- * 지원 프로바이더: Anthropic, OpenAI, Google (Gemini), Groq, OpenRouter, OpenCode
+ * 지원 프로바이더: Anthropic, OpenAI, Google (Gemini), Groq, OpenRouter, OpenCode, Claude Code CLI
  *
  * API 에러 발생 시 ProviderError로 분류하여 상위에서 사용자 메시지 전달 가능.
  */
@@ -26,6 +26,7 @@ import { createGroqModel } from './groq.js';
 import { createOpenRouterModel } from './openrouter.js';
 import { createOpenCodeModel } from './opencode.js';
 import { createGoogleModel } from './google.js';
+import { streamClaudeCode, isClaudeCodeAvailable } from './claude-code.js';
 
 export { buildSystemPrompt } from './system-prompt.js';
 
@@ -159,6 +160,57 @@ function extractErrorMessage(body: string): string | null {
  * API 에러 시 ProviderError를 throw.
  */
 export async function* streamChat(params: ChatParams): AsyncGenerator<string> {
+  // --- Claude Code CLI 분기 ---
+  if (params.providerId === 'claude-code') {
+    const systemPrompt = buildSystemPrompt(
+      params.agentSystemPrompt,
+      params.skillPrompts,
+      params.timeAware,
+      params.smartStep,
+      params.targetName,
+    );
+
+    // 대화 히스토리를 단일 프롬프트로 조합
+    const conversationParts: string[] = [];
+    for (const m of params.messages) {
+      const prefix = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System';
+      conversationParts.push(`[${prefix}]: ${m.content}`);
+    }
+    const prompt = conversationParts.join('\n\n');
+
+    logger.debug(
+      {
+        provider: 'claude-code',
+        model: params.model,
+        messageCount: params.messages.length,
+        promptLen: prompt.length,
+      },
+      'Streaming chat via Claude Code CLI',
+    );
+
+    try {
+      for await (const chunk of streamClaudeCode({
+        prompt,
+        systemPrompt,
+        model: params.model || undefined,
+        apiKey: params.apiKey || undefined,
+      })) {
+        yield chunk;
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.warn({ provider: 'claude-code', err: errMsg }, 'Claude Code CLI error');
+      throw new ProviderError(
+        errMsg.includes('API key') ? 'auth' : 'unknown',
+        undefined,
+        `⚠️ Claude Code CLI error: ${errMsg}`,
+        err,
+      );
+    }
+    return;
+  }
+
+  // --- 기존 Vercel AI SDK 경로 ---
   const factory = getModelFactory(params.providerId);
   const model = factory({
     model: params.model,

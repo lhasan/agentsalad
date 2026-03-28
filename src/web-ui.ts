@@ -1997,6 +1997,7 @@ function getProviderDocs(){return{
   groq:{url:'https://console.groq.com/docs/models',keyUrl:'https://console.groq.com/keys',name:'Groq',hint:t('provHintGroq')},
   openrouter:{url:'https://openrouter.ai/models',keyUrl:'https://openrouter.ai/settings/keys',name:'OpenRouter',hint:t('provHintOpenrouter')},
   opencode:{url:'https://opencode.ai',keyUrl:'https://opencode.ai/auth',name:'OpenCode',hint:t('provHintOpencode')},
+  'claude-code':{url:'https://docs.anthropic.com/en/docs/claude-code',keyUrl:'https://console.anthropic.com/settings/keys',name:'Claude Code CLI',hint:'claude --print mode (sonnet, opus, haiku)'},
 }}
 function updateModelGuide(){
   const prov=$('mAgProv')?.value||'anthropic';
