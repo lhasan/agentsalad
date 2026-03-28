@@ -592,7 +592,7 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 <!-- SIDEBAR: block palette -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    <div class="logo">Agent<b>Salad</b></div>
+    <div class="logo"><b>Maru</b></div>
     <a class="logo-help" id="logoHelp" href="#" onclick="event.preventDefault();$('aboutModal').classList.add('show')" title="What is Maru?">?</a>
   </div>
   <div class="sidebar-blocks">
@@ -647,7 +647,7 @@ input[type=checkbox]{accent-color:var(--green);cursor:pointer}
 <main class="main-content">
 <div class="mobile-hdr">
   <button class="burger" onclick="toggleSidebar()">&#9776;</button>
-  <div class="logo" style="font-size:1.2rem">Agent<b>Salad</b></div>
+  <div class="logo" style="font-size:1.2rem"><b>Maru</b></div>
 </div>
 
 <!-- TAB NAV -->
@@ -1997,7 +1997,7 @@ function getProviderDocs(){return{
   groq:{url:'https://console.groq.com/docs/models',keyUrl:'https://console.groq.com/keys',name:'Groq',hint:t('provHintGroq')},
   openrouter:{url:'https://openrouter.ai/models',keyUrl:'https://openrouter.ai/settings/keys',name:'OpenRouter',hint:t('provHintOpenrouter')},
   opencode:{url:'https://opencode.ai',keyUrl:'https://opencode.ai/auth',name:'OpenCode',hint:t('provHintOpencode')},
-  'claude-code':{url:'https://docs.anthropic.com/en/docs/claude-code',keyUrl:'https://console.anthropic.com/settings/keys',name:'Claude Code CLI',hint:'claude --print mode (sonnet, opus, haiku)'},
+  'claude-code':{url:'https://docs.anthropic.com/en/docs/claude-code',keyUrl:'https://console.anthropic.com/settings/keys',name:'Claude Code CLI',hint:'opus, sonnet, haiku (or full name e.g. claude-opus-4-20250514)'},
 }}
 function updateModelGuide(){
   const prov=$('mAgProv')?.value||'anthropic';
@@ -4119,6 +4119,28 @@ export function startWebUiServer(
         sendJson(res, 200, { ok: true, message: 'Server shutting down...' });
         logger.info('Shutdown requested via Web UI');
         setTimeout(() => process.exit(0), 500);
+        return;
+      }
+
+      // Claude Code CLI auth status
+      if (
+        url.pathname === '/api/integrations/claude-code/status' &&
+        req.method === 'GET'
+      ) {
+        try {
+          const { checkClaudeCodeAuth } = await import('./providers/claude-code.js');
+          const status = await checkClaudeCodeAuth();
+          sendJson(res, 200, status);
+        } catch (err) {
+          sendJson(res, 200, {
+            installed: false,
+            version: null,
+            loggedIn: false,
+            authMethod: null,
+            apiKeyConfigured: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
         return;
       }
 

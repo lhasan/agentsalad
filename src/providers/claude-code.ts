@@ -29,6 +29,88 @@ export function isClaudeCodeAvailable(): boolean {
   }
 }
 
+export interface ClaudeCodeAuthStatus {
+  installed: boolean;
+  version: string | null;
+  loggedIn: boolean;
+  authMethod: string | null;
+  apiKeyConfigured: boolean;
+  error: string | null;
+}
+
+/**
+ * Claude Code CLI의 인증 상태를 확인.
+ * `claude auth status` 명령으로 OAuth 세션 / API 키 상태를 조회.
+ */
+export async function checkClaudeCodeAuth(): Promise<ClaudeCodeAuthStatus> {
+  const { execSync } = await import('child_process');
+  const result: ClaudeCodeAuthStatus = {
+    installed: false,
+    version: null,
+    loggedIn: false,
+    authMethod: null,
+    apiKeyConfigured: false,
+    error: null,
+  };
+
+  // 설치 확인
+  try {
+    execSync('which claude', { stdio: 'ignore' });
+    result.installed = true;
+  } catch {
+    result.error = 'Claude Code CLI not installed. Install: npm install -g @anthropic-ai/claude-code';
+    return result;
+  }
+
+  // 버전 확인
+  try {
+    result.version = execSync('claude --version', { encoding: 'utf-8', timeout: 5000 }).trim();
+  } catch {
+    result.version = 'unknown';
+  }
+
+  // 인증 상태 확인
+  try {
+    const authJson = execSync('claude auth status', {
+      encoding: 'utf-8',
+      timeout: 10000,
+      env: { ...process.env, ANTHROPIC_API_KEY: '' },
+    }).trim();
+    const auth = JSON.parse(authJson);
+    result.loggedIn = auth.loggedIn === true;
+    result.authMethod = auth.authMethod || null;
+    result.apiKeyConfigured = auth.apiKeySource === 'ANTHROPIC_API_KEY' && auth.loggedIn;
+  } catch (err) {
+    result.error = `Auth check failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  // OAuth 실제 동작 테스트 (빠른 ping)
+  if (result.loggedIn) {
+    try {
+      const testResult = execSync(
+        'claude --print --bare --model sonnet "respond with exactly: AUTH_OK"',
+        {
+          encoding: 'utf-8',
+          timeout: 15000,
+          env: { ...process.env, ANTHROPIC_API_KEY: '' },
+        },
+      ).trim();
+      if (!testResult.includes('AUTH_OK')) {
+        // 응답은 받았지만 다른 내용 → 인증은 성공
+        result.loggedIn = true;
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('Not logged in') || errMsg.includes('Invalid API key')) {
+        result.loggedIn = false;
+        result.error = 'OAuth session expired. Run: claude login';
+      }
+    }
+  }
+
+  return result;
+}
+
 interface ClaudeCodeCallParams {
   prompt: string;
   systemPrompt?: string;

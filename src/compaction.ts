@@ -105,8 +105,9 @@ export function getContextWindow(providerId: string, model: string): number {
     return 128_000;
   }
 
-  // Claude Code CLI — uses Anthropic models, assume 200K
+  // Claude Code CLI — uses Anthropic models
   if (providerId === 'claude-code') {
+    // opus/sonnet: 200K, haiku: 200K
     return 200_000;
   }
 
