@@ -72,8 +72,12 @@ export async function callClaudeCode(
       string,
       string
     >;
-    if (params.apiKey) {
+    // API key가 있으면 설정, 없으면 환경변수도 비워서 OAuth 세션 사용
+    if (params.apiKey && params.apiKey.length > 50) {
       env.ANTHROPIC_API_KEY = params.apiKey;
+    } else {
+      // 짧거나 빈 키는 무효 → 삭제하여 OAuth fallback
+      delete env.ANTHROPIC_API_KEY;
     }
 
     logger.debug(
@@ -81,6 +85,7 @@ export async function callClaudeCode(
         model: params.model,
         promptLen: params.prompt.length,
         hasSystemPrompt: !!params.systemPrompt,
+        authMode: env.ANTHROPIC_API_KEY ? 'api-key' : 'oauth',
       },
       'Calling Claude Code CLI',
     );
@@ -153,8 +158,11 @@ export async function* streamClaudeCode(
     string,
     string
   >;
-  if (params.apiKey) {
+  // API key가 있으면 설정, 없으면 환경변수도 비워서 OAuth 세션 사용
+  if (params.apiKey && params.apiKey.length > 50) {
     env.ANTHROPIC_API_KEY = params.apiKey;
+  } else {
+    delete env.ANTHROPIC_API_KEY;
   }
 
   const child = spawn('claude', args, {
