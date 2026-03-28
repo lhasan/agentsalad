@@ -118,8 +118,7 @@ function discoverOpenClawToken(): AnthropicToken | null {
 
           // OAuth 토큰 (access)
           if (p.type === 'oauth' && typeof p.access === 'string') {
-            let expires =
-              typeof p.expires === 'number' ? p.expires : undefined;
+            let expires = typeof p.expires === 'number' ? p.expires : undefined;
             // expires가 초 단위일 수 있으므로 보정
             if (expires && expires < 1e12) expires = expires * 1000;
             if (expires && expires < Date.now()) continue; // 만료됨
@@ -196,11 +195,7 @@ export function discoverAnthropicToken(): AuthDiscoveryResult {
       'Discovered Anthropic token from OpenClaw',
     );
     // Maru 저장소에도 복사
-    saveMaruToken(
-      openclawToken.token,
-      'openclaw',
-      openclawToken.expires,
-    );
+    saveMaruToken(openclawToken.token, 'openclaw', openclawToken.expires);
     return {
       token: openclawToken.token,
       source: `openclaw (${openclawToken.profileId})`,

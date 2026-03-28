@@ -4154,8 +4154,7 @@ export function startWebUiServer(
             sendJson(res, 400, { error: 'Token is required' });
             return;
           }
-          const { saveMaruToken } =
-            await import('./providers/claude-auth.js');
+          const { saveMaruToken } = await import('./providers/claude-auth.js');
           saveMaruToken(token, 'setup-token');
           sendJson(res, 200, { ok: true });
         } catch (err) {
@@ -4165,7 +4164,6 @@ export function startWebUiServer(
         }
         return;
       }
-
 
       // Google integration status
       if (
