@@ -2593,6 +2593,7 @@ document.addEventListener('mouseup',()=>{setTimeout(()=>dragMoved=false,100)});
 function getAgentWarning(ag){
   const prov=D.providers.find(pr=>pr.id===ag.provider_id);
   if(!prov)return t('unknownProvider');
+  if(prov.provider_key==='claude-code')return '';
   if(!prov.api_key)return t('apiKeyNotSet');
   return '';
 }
@@ -2721,8 +2722,35 @@ function renderBlocks(){
 function renderProviders(){
   const docs=getProviderDocs();
   $('provRows').innerHTML=D.providers.map(p=>{
+    const isClaudeCode=p.provider_key==='claude-code';
     const hasKey=!!p.api_key;
     const doc=docs[p.id]||{keyUrl:'#',name:p.name};
+    if(isClaudeCode){
+      const badge='<span class="prov-badge" id="ccAuthBadge" style="background:#f0f0f0;color:#666">⏳</span>';
+      const card='<div class="prov-card">'+
+        '<div class="prov-header">'+
+          '<div class="prov-name">'+esc(doc.name)+'</div>'+
+          badge+
+        '</div>'+
+        '<div class="prov-input" style="font-size:0.85rem;color:#666" id="ccAuthInfo">Checking auth...</div>'+
+      '</div>';
+      setTimeout(async()=>{
+        try{
+          const r=await api('/api/integrations/claude-code/status');
+          const el=$('ccAuthBadge');const info=$('ccAuthInfo');
+          if(r.hasToken){
+            el.className='prov-badge set';
+            el.textContent='\\u2713 Authenticated';
+            info.innerHTML='<b>Source:</b> '+esc(r.tokenSource)+(r.expiresIn?' · <b>Expires:</b> '+esc(r.expiresIn):'')+(r.cliVersion?' · <b>CLI:</b> '+esc(r.cliVersion):'');
+          }else{
+            el.className='prov-badge unset';
+            el.textContent='Not authenticated';
+            info.innerHTML=(r.suggestions||[]).map(s=>'💡 '+esc(s)).join('<br>')||'Run claude setup-token or install OpenClaw';
+          }
+        }catch{}
+      },100);
+      return card;
+    }
     const badge=hasKey
       ?'<span class="prov-badge set">\\u2713 '+esc(t('setLabel'))+'</span>'
       :'<span class="prov-badge unset">'+esc(t('notSetLabel'))+'</span>';
